@@ -1,0 +1,33 @@
+.checklist-item {
+    display: flex;
+    flex-direction: column; /* Apila los elementos verticalmente */
+    margin-bottom: 10px; /* Espacio entre ítems */
+}
+
+.checklist-label {
+    font-weight: bold;
+    margin-bottom: 5px; /* Espacio entre etiqueta y select/observaciones */
+}
+.selection-container{
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    margin-bottom: 5px;
+}
+
+.select-input {
+    margin-right: 10px; /* Espacio entre select y textarea */
+    padding: 5px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 16px;
+}
+
+.observation-input {
+    padding: 5px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 14px;
+    resize: vertical; /* Permite redimensionar verticalmente */
+    width: 95%; /* Ocupa todo el ancho disponible */
+}
