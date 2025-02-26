@@ -4,6 +4,9 @@ import { Container, Box, Button, Snackbar, Alert, Typography, Tab, Tabs, Paper }
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 
+// Importación de los logos en base64
+import { HEADER_LOGO, FOOTER_BANNER } from './assets/logoImages.js';
+
 import HeaderForm from './components/HeaderForm';
 import ChecklistSection from './components/ChecklistSection';
 import SignatureCapture from './components/SignatureCapture';
@@ -274,44 +277,49 @@ function App() {
         }
         
         const doc = new jsPDF();
-        let currentY = 20; // Variable para controlar la posición vertical actual
+        let currentY = 35; // Aumentamos el espacio inicial para el encabezado con logo
         
-        // Encabezado con texto estilizado
-        doc.setFillColor(12, 35, 64); // Color azul oscuro institucional
-        doc.rect(0, 0, doc.internal.pageSize.width, 25, 'F');
-        
-        // Texto del encabezado
-        doc.setTextColor(255, 255, 255); // Texto blanco
-        doc.setFontSize(16).setFont('helvetica', 'bold');
-        doc.text('ALCALDÍA DE BARRANQUILLA', 105, 15, { align: 'center' });
-        
-        // Texto adicional
-        doc.setFontSize(10).setFont('helvetica', 'normal');
-        doc.text('NIT: 890102018-1', 105, 22, { align: 'center' });
-        
-        // Ajustar posición inicial
-        currentY += 15;
+        // Añadir logo en el encabezado
+        try {
+            // Logo principal en el encabezado
+            doc.addImage(HEADER_LOGO, 'JPEG', 0, 0, doc.internal.pageSize.width, 30);
+            
+            // Se eliminó la línea separadora que atravesaba el título
+        } catch (error) {
+            console.error('Error al cargar la imagen del encabezado:', error);
+            
+            // Encabezado alternativo en caso de error
+            doc.setFillColor(12, 35, 64);
+            doc.rect(0, 0, doc.internal.pageSize.width, 25, 'F');
+            
+            doc.setTextColor(255, 255, 255);
+            doc.setFontSize(16).setFont('helvetica', 'bold');
+            doc.text('ALCALDÍA DE BARRANQUILLA', 105, 15, { align: 'center' });
+            
+            doc.setFontSize(10).setFont('helvetica', 'normal');
+            doc.text('NIT: 890102018-1', 105, 22, { align: 'center' });
+        }
         
         // Título del reporte
-        doc.setTextColor(0, 0, 0); // Texto negro
+        doc.setTextColor(0, 0, 0);
         doc.setFontSize(16).setFont('helvetica', 'bold').text('Reporte de Supervisión - Centros de Vida', 105, currentY, { align: 'center' });
         currentY += 10;
 
         doc.setFontSize(12).setFont('helvetica', 'normal');
 
+        // Datos actualizados según la nueva estructura del formulario
         const headerRows = [
             ['Fecha de Visita', headerData.fechaVisita || 'N/A'],
             ['Hora de Visita', headerData.horaVisita || 'N/A'],
             ['Espacio de Atención', headerData.espacioAtencion || 'N/A'],
-            ['Número de Visita', headerData.numeroVisita || 'N/A'],
-            ['Entidad Contratista', headerData.entidadContratista || 'N/A'],
+            ['Apoyo a la supervisión quien realiza la visita', headerData.apoyoSupervision || 'N/A'],
+            ['Personas mayores asistentes', headerData.pmAsistentes || 'N/A'],
+            ['Contratista', headerData.entidadContratista || 'N/A'],
             ['NIT', headerData.nit || 'N/A'],
-            ['Nombre Representante Legal', headerData.nombreRepresentante || 'N/A'],
-            ['Nombre Profesional quien atiende la visita', headerData.nombreProfesional || 'N/A'],
-            ['Número de Contrato', headerData.numeroContrato || 'N/A'],
-            ['PM Asistentes', headerData.pmAsistentes || 'N/A'],
-            ['Anexos', headerData.anexos || 'N/A'],
-            ['Nombre Supervisor', headerData.nombreSupervisor || 'N/A']
+            ['No de contrato', headerData.numeroContrato || 'N/A'],
+            ['Rep. Legal', headerData.nombreRepresentante || 'N/A'],
+            ['Persona quien atiende la visita', headerData.nombreProfesional || 'N/A'],
+            ['Supervisor del Distrito', headerData.nombreSupervisor || 'N/A']
         ];
 
         // Tabla de datos de la visita
@@ -336,7 +344,7 @@ function App() {
         // Añadir información de geolocalización si está disponible
         if (geoLocation && (geoLocation.latitude || geoLocation.longitude)) {
             // Verificar si hay suficiente espacio para la sección
-            if (currentY + 60 > doc.internal.pageSize.height - 20) {
+            if (currentY + 60 > doc.internal.pageSize.height - 30) {
                 doc.addPage();
                 currentY = 20;
             }
@@ -403,7 +411,7 @@ function App() {
         const requiredSpace = 20 + (Object.keys(signatures).length * 50) + (generalObservations ? 30 : 0);
         
         // Si no hay suficiente espacio, añadir una nueva página
-        if (currentY + requiredSpace > doc.internal.pageSize.height - 20) {
+        if (currentY + requiredSpace > doc.internal.pageSize.height - 30) {
             doc.addPage();
             currentY = 20;
         }
@@ -422,7 +430,7 @@ function App() {
             const role = uniqueRoles[i];
             
             // Verificar si hay suficiente espacio para la firma en la página actual
-            if (currentY + 50 > doc.internal.pageSize.height - 20) {
+            if (currentY + 50 > doc.internal.pageSize.height - 30) {
                 doc.addPage();
                 currentY = 20;
             }
@@ -443,7 +451,7 @@ function App() {
         // Observaciones generales
         if (generalObservations) {
             // Verificar si hay suficiente espacio para las observaciones
-            if (currentY + 30 > doc.internal.pageSize.height - 20) {
+            if (currentY + 30 > doc.internal.pageSize.height - 30) {
                 doc.addPage();
                 currentY = 20;
             }
@@ -463,7 +471,7 @@ function App() {
         // Agregar evidencia fotográfica al PDF si hay fotos
         if (photos && photos.length > 0) {
             // Verificar si hay suficiente espacio para el título de la sección
-            if (currentY + 30 > doc.internal.pageSize.height - 20) {
+            if (currentY + 30 > doc.internal.pageSize.height - 30) {
                 doc.addPage();
                 currentY = 20;
             }
@@ -476,7 +484,7 @@ function App() {
                 const photo = photos[i];
                 
                 // Verificar si hay suficiente espacio para la foto
-                if (currentY + 110 > doc.internal.pageSize.height - 20) {
+                if (currentY + 110 > doc.internal.pageSize.height - 30) {
                     doc.addPage();
                     currentY = 20;
                 }
@@ -515,18 +523,26 @@ function App() {
         for (let i = 1; i <= totalPages; i++) {
             doc.setPage(i);
             
-            // Línea separadora
-            doc.setDrawColor(12, 35, 64);
-            doc.line(10, doc.internal.pageSize.height - 20, doc.internal.pageSize.width - 10, doc.internal.pageSize.height - 20);
-            
-            // Texto del pie de página
-            doc.setFontSize(8).setFont('helvetica', 'normal');
-            doc.setTextColor(0, 0, 0);
-            doc.text('Calle 34 No. 43-31. Barranquilla.Colombia', 105, doc.internal.pageSize.height - 15, { align: 'center' });
-            doc.text('BARRANQUILLA.GOV.CO', 105, doc.internal.pageSize.height - 10, { align: 'center' });
-            
-            // Número de página
-            doc.text(`Página ${i} de ${totalPages}`, doc.internal.pageSize.width - 20, doc.internal.pageSize.height - 10);
+            try {
+                // Banner del pie de página
+                doc.addImage(FOOTER_BANNER, 'JPEG', 0, doc.internal.pageSize.height - 25, doc.internal.pageSize.width, 25);
+                
+                // Eliminamos el número de página para no interferir con el logo
+            } catch (error) {
+                console.error('Error al cargar la imagen del pie de página:', error);
+                
+                // Línea separadora en caso de error
+                doc.setDrawColor(12, 35, 64);
+                doc.line(10, doc.internal.pageSize.height - 20, doc.internal.pageSize.width - 10, doc.internal.pageSize.height - 20);
+                
+                // Texto del pie de página
+                doc.setFontSize(8).setFont('helvetica', 'normal');
+                doc.setTextColor(0, 0, 0);
+                doc.text('Calle 34 No. 43-31. Barranquilla.Colombia', 105, doc.internal.pageSize.height - 15, { align: 'center' });
+                doc.text('BARRANQUILLA.GOV.CO', 105, doc.internal.pageSize.height - 10, { align: 'center' });
+                
+                // No agregamos el número de página en el caso de error tampoco
+            }
         }
 
         doc.save('reporte-supervision.pdf');

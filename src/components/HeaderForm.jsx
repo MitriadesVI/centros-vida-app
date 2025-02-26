@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import '../styles/forms.css';
-import './HeaderForm.css'; // Importamos una hoja de estilos específica
+import './HeaderForm.css';
 
 const HeaderForm = ({ onDataChange, initialData = {} }) => {
     const [formData, setFormData] = useState(() => {
@@ -96,8 +96,9 @@ const HeaderForm = ({ onDataChange, initialData = {} }) => {
             </div>
             <form>
                 <div className="form-section header-section">
-                    <h3 className="section-title">Información Básica de la Visita</h3>
+                    <h3 className="section-title">Información de la Visita</h3>
                     <div className="header-form-grid">
+                        {/* Fecha y Hora (automáticos) */}
                         <div className="form-group">
                             <label className="form-label" htmlFor="fechaVisita">Fecha de Visita:</label>
                             <input
@@ -124,6 +125,7 @@ const HeaderForm = ({ onDataChange, initialData = {} }) => {
                             />
                         </div>
 
+                        {/* Espacio de Atención */}
                         <div className="form-group">
                             <label className="form-label" htmlFor="espacioAtencion">Espacio de Atención:</label>
                             <input
@@ -136,25 +138,35 @@ const HeaderForm = ({ onDataChange, initialData = {} }) => {
                             />
                         </div>
 
+                        {/* Nuevo campo: Apoyo a la supervisión */}
                         <div className="form-group">
-                            <label className="form-label" htmlFor="numeroVisita">Número de Visita:</label>
+                            <label className="form-label" htmlFor="apoyoSupervision">Apoyo a la supervisión quien realiza la visita:</label>
                             <input
                                 type="text"
                                 className="form-control"
-                                id="numeroVisita"
-                                name="numeroVisita"
-                                value={formData.numeroVisita || ''}
+                                id="apoyoSupervision"
+                                name="apoyoSupervision"
+                                value={formData.apoyoSupervision || ''}
                                 onChange={handleChange}
                             />
                         </div>
-                    </div>
-                </div>
 
-                <div className="form-section header-section">
-                    <h3 className="section-title">Información del Contratista</h3>
-                    <div className="header-form-grid">
+                        {/* Personas mayores asistentes (antes era pmAsistentes) */}
                         <div className="form-group">
-                            <label className="form-label" htmlFor="entidadContratista">Entidad Contratista:</label>
+                            <label className="form-label" htmlFor="pmAsistentes">Personas mayores asistentes:</label>
+                            <input
+                                type="number"
+                                className="form-control"
+                                id="pmAsistentes"
+                                name="pmAsistentes"
+                                value={formData.pmAsistentes || ''}
+                                onChange={handleChange}
+                            />
+                        </div>
+
+                        {/* Contratista (antes era entidadContratista) */}
+                        <div className="form-group">
+                            <label className="form-label" htmlFor="entidadContratista">Contratista:</label>
                             <input
                                 type="text"
                                 className="form-control"
@@ -165,6 +177,7 @@ const HeaderForm = ({ onDataChange, initialData = {} }) => {
                             />
                         </div>
 
+                        {/* NIT */}
                         <div className="form-group">
                             <label className="form-label" htmlFor="nit">NIT:</label>
                             <input
@@ -177,37 +190,9 @@ const HeaderForm = ({ onDataChange, initialData = {} }) => {
                             />
                         </div>
 
+                        {/* No de contrato */}
                         <div className="form-group">
-                            <label className="form-label" htmlFor="nombreRepresentante">Nombre Representante Legal:</label>
-                            <input
-                                type="text"
-                                className="form-control"
-                                id="nombreRepresentante"
-                                name="nombreRepresentante"
-                                value={formData.nombreRepresentante || ''}
-                                onChange={handleChange}
-                            />
-                        </div>
-                    </div>
-                </div>
-
-                <div className="form-section header-section">
-                    <h3 className="section-title">Información Operativa</h3>
-                    <div className="header-form-grid">
-                        <div className="form-group">
-                            <label className="form-label" htmlFor="nombreProfesional">Nombre Profesional quien atiende la visita:</label>
-                            <input
-                                type="text"
-                                className="form-control"
-                                id="nombreProfesional"
-                                name="nombreProfesional"
-                                value={formData.nombreProfesional || ''}
-                                onChange={handleChange}
-                            />
-                        </div>
-
-                        <div className="form-group">
-                            <label className="form-label" htmlFor="numeroContrato">Número de Contrato:</label>
+                            <label className="form-label" htmlFor="numeroContrato">No de contrato:</label>
                             <input
                                 type="text"
                                 className="form-control"
@@ -218,32 +203,35 @@ const HeaderForm = ({ onDataChange, initialData = {} }) => {
                             />
                         </div>
 
+                        {/* Rep. Legal (antes era nombreRepresentante) */}
                         <div className="form-group">
-                            <label className="form-label" htmlFor="pmAsistentes">PM Asistentes:</label>
-                            <input
-                                type="number"
-                                className="form-control"
-                                id="pmAsistentes"
-                                name="pmAsistentes"
-                                value={formData.pmAsistentes || ''}
-                                onChange={handleChange}
-                            />
-                        </div>
-
-                        <div className="form-group">
-                            <label className="form-label" htmlFor="anexos">Anexos:</label>
+                            <label className="form-label" htmlFor="nombreRepresentante">Rep. Legal:</label>
                             <input
                                 type="text"
                                 className="form-control"
-                                id="anexos"
-                                name="anexos"
-                                value={formData.anexos || ''}
+                                id="nombreRepresentante"
+                                name="nombreRepresentante"
+                                value={formData.nombreRepresentante || ''}
                                 onChange={handleChange}
                             />
                         </div>
 
+                        {/* Persona quien atiende la visita (antes era nombreProfesional) */}
                         <div className="form-group">
-                            <label className="form-label" htmlFor="nombreSupervisor">Nombre Supervisor:</label>
+                            <label className="form-label" htmlFor="nombreProfesional">Persona quien atiende la visita:</label>
+                            <input
+                                type="text"
+                                className="form-control"
+                                id="nombreProfesional"
+                                name="nombreProfesional"
+                                value={formData.nombreProfesional || ''}
+                                onChange={handleChange}
+                            />
+                        </div>
+
+                        {/* Supervisor del Distrito (antes era nombreSupervisor) */}
+                        <div className="form-group">
+                            <label className="form-label" htmlFor="nombreSupervisor">Supervisor del Distrito:</label>
                             <input
                                 type="text"
                                 className="form-control"
