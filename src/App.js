@@ -205,6 +205,10 @@ function App() {
         const tableRows = [];
 
         checklistData.forEach((section) => {
+            // Añadir espacio antes de cada sección para mejorar la legibilidad
+            tableRows.push([{ content: ' ', colSpan: 2, styles: { cellPadding: 3 } }]);
+            
+            // Encabezado de la sección con más espacio y mejor formato
             tableRows.push([{ 
                 content: section.title, 
                 colSpan: 2, 
@@ -212,30 +216,35 @@ function App() {
                     fillColor: [30, 136, 229], 
                     textColor: 255, 
                     fontStyle: 'bold', 
-                    halign: 'left',
-                    fontSize: 11,
-                    cellPadding: 8
+                    halign: 'center', // Centrar el título de sección
+                    fontSize: 12,
+                    cellPadding: 10, // Más espacio para el título de sección
+                    cellWidth: 'auto'
                 } 
             }]);
+            
+            // Encabezados de columna con más espacio
             tableRows.push([
                 { 
                     content: 'Criterio', 
                     styles: { 
                         fontStyle: 'bold', 
-                        halign: 'left', 
+                        halign: 'center', 
                         fillColor: [240, 240, 240], 
-                        cellWidth: 150,
-                        fontSize: 10
+                        cellWidth: 140, // Ajustar ancho de la columna criterio
+                        fontSize: 10,
+                        cellPadding: 8
                     } 
                 },
                 { 
                     content: 'Condición', 
                     styles: { 
                         fontStyle: 'bold', 
-                        halign: 'left', 
+                        halign: 'center', 
                         fillColor: [240, 240, 240], 
-                        cellWidth: 40,
-                        fontSize: 10
+                        cellWidth: 50, // Ajustar ancho de la columna condición
+                        fontSize: 10,
+                        cellPadding: 8
                     } 
                 }
             ]);
@@ -249,18 +258,20 @@ function App() {
                         content: `${item.number}. ${item.label}`, 
                         styles: { 
                             fontStyle: 'normal', 
-                            cellWidth: 150,
+                            halign: 'left',
+                            cellWidth: 140,
                             fontSize: 10,
-                            cellPadding: 5
+                            cellPadding: 6,
+                            overflow: 'linebreak' // Asegurar que el texto se ajuste correctamente
                         } 
                     },
                     { 
                         content: displayValue, 
                         styles: { 
-                            halign: 'left', 
-                            cellWidth: 40,
+                            halign: 'center', // Centrar el valor de la condición
+                            cellWidth: 50,
                             fontSize: 10,
-                            cellPadding: 5
+                            cellPadding: 6
                         } 
                     }
                 ]);
@@ -276,33 +287,28 @@ function App() {
             markFormAsComplete(currentFormId);
         }
         
-        const doc = new jsPDF();
-        let currentY = 35; // Aumentamos el espacio inicial para el encabezado con logo
+        // Crear documento PDF con más margen
+        const doc = new jsPDF({
+            orientation: 'portrait',
+            unit: 'mm',
+            format: 'a4',
+            margins: { top: 40, bottom: 40, left: 20, right: 20 }
+        });
         
-        // Añadir logo en el encabezado
-        try {
-            // Logo principal en el encabezado
-            doc.addImage(HEADER_LOGO, 'JPEG', 0, 0, doc.internal.pageSize.width, 30);
-            
-            // Se eliminó la línea separadora que atravesaba el título
-        } catch (error) {
-            console.error('Error al cargar la imagen del encabezado:', error);
-            
-            // Encabezado alternativo en caso de error
-            doc.setFillColor(12, 35, 64);
-            doc.rect(0, 0, doc.internal.pageSize.width, 25, 'F');
-            
-            doc.setTextColor(255, 255, 255);
-            doc.setFontSize(16).setFont('helvetica', 'bold');
-            doc.text('ALCALDÍA DE BARRANQUILLA', 105, 15, { align: 'center' });
-            
-            doc.setFontSize(10).setFont('helvetica', 'normal');
-            doc.text('NIT: 890102018-1', 105, 22, { align: 'center' });
-        }
+        // Definir márgenes para el contenido
+        const pageWidth = doc.internal.pageSize.width;
+        const pageHeight = doc.internal.pageSize.height;
+        const margin = 20; // Margen estándar de 20mm para todos los lados
         
-        // Título del reporte
+        // Altura disponible para el contenido (restando espacio para encabezado y pie de página)
+        const contentHeight = pageHeight - (margin * 2) - 35; // 35mm para encabezado y pie de página
+        
+        // Posición vertical inicial (después del encabezado)
+        let currentY = 45; 
+        
+        // Título del reporte (solo en la primera página)
         doc.setTextColor(0, 0, 0);
-        doc.setFontSize(16).setFont('helvetica', 'bold').text('Reporte de Supervisión - Centros de Vida', 105, currentY, { align: 'center' });
+        doc.setFontSize(16).setFont('helvetica', 'bold').text('Reporte de Supervisión - Centros de Vida', pageWidth / 2, currentY, { align: 'center' });
         currentY += 10;
 
         doc.setFontSize(12).setFont('helvetica', 'normal');
@@ -322,7 +328,7 @@ function App() {
             ['Supervisor del Distrito', headerData.nombreSupervisor || 'N/A']
         ];
 
-        // Tabla de datos de la visita
+        // Tabla de datos de la visita con mejor formato
         doc.autoTable({ 
             head: [['Datos de la Visita', 'Información']], 
             body: headerRows, 
@@ -330,26 +336,33 @@ function App() {
             theme: 'grid',
             styles: {
                 fontSize: 10,
-                cellPadding: 5
+                cellPadding: 6,
+                overflow: 'linebreak'
             },
             headStyles: {
                 fillColor: [30, 136, 229],
                 textColor: 255,
-                fontSize: 11
+                fontSize: 12,
+                halign: 'center'
+            },
+            margin: { left: margin, right: margin },
+            columnStyles: {
+                0: { cellWidth: 80 },
+                1: { cellWidth: 'auto' }
             }
         });
         
-        currentY = doc.lastAutoTable.finalY + 10;
+        currentY = doc.lastAutoTable.finalY + 15; // Más espacio después de la tabla
         
         // Añadir información de geolocalización si está disponible
         if (geoLocation && (geoLocation.latitude || geoLocation.longitude)) {
             // Verificar si hay suficiente espacio para la sección
-            if (currentY + 60 > doc.internal.pageSize.height - 30) {
+            if (currentY + 80 > pageHeight - 40) {
                 doc.addPage();
-                currentY = 20;
+                currentY = 40; // Iniciar en una posición más baja en la nueva página
             }
             
-            // Tabla para la geolocalización
+            // Tabla para la geolocalización con mejor formato
             const geoRows = [];
             
             if (geoLocation.latitude && geoLocation.longitude) {
@@ -377,48 +390,59 @@ function App() {
                     theme: 'grid',
                     styles: {
                         fontSize: 10,
-                        cellPadding: 5
+                        cellPadding: 6,
+                        overflow: 'linebreak'
                     },
                     headStyles: {
                         fillColor: [30, 136, 229],
                         textColor: 255,
-                        fontSize: 11
+                        fontSize: 12,
+                        halign: 'center'
                     },
+                    margin: { left: margin, right: margin },
                     columnStyles: {
-                        0: { cellWidth: 60 },
+                        0: { cellWidth: 80 },
                         1: { cellWidth: 'auto' }
                     }
                 });
                 
-                currentY = doc.lastAutoTable.finalY + 10;
+                currentY = doc.lastAutoTable.finalY + 15; // Más espacio después de la tabla
             }
         }
 
-        // Tabla de checklist
+        // Tabla de checklist con mejor formato y márgenes
         doc.autoTable({ 
             body: generateTableData(), 
-            startY: currentY, 
+            startY: currentY,
             theme: 'grid',
             styles: {
                 fontSize: 10,
-                cellPadding: 5
+                cellPadding: 6,
+                overflow: 'linebreak'
+            },
+            margin: { left: margin, right: margin },
+            tableWidth: pageWidth - (margin * 2),
+            didDrawPage: (data) => {
+                // Añadir encabezado y pie de página en cada página nueva
+                addHeaderAndFooter(doc);
             }
         });
         
-        currentY = doc.lastAutoTable.finalY + 10;
+        currentY = doc.lastAutoTable.finalY + 15; // Más espacio después de la tabla
 
         // Verificar si queda suficiente espacio para observaciones y firmas
-        const requiredSpace = 20 + (Object.keys(signatures).length * 50) + (generalObservations ? 30 : 0);
+        const requiredSpace = 30 + (Object.keys(signatures).length * 60) + (generalObservations ? 40 : 0);
         
         // Si no hay suficiente espacio, añadir una nueva página
-        if (currentY + requiredSpace > doc.internal.pageSize.height - 30) {
+        if (currentY + requiredSpace > pageHeight - 40) {
             doc.addPage();
-            currentY = 20;
+            currentY = 40; // Iniciar en una posición más baja en la nueva página
+            addHeaderAndFooter(doc); // Añadir encabezado y pie de página en la nueva página
         }
 
-        // Sección de firmas
-        doc.setFontSize(12).setFont('helvetica', 'bold').text('Firmas:', 10, currentY);
-        currentY += 10;
+        // Sección de firmas con mejor formato
+        doc.setFontSize(14).setFont('helvetica', 'bold').text('Firmas:', margin, currentY);
+        currentY += 15;
 
         // Procesar cada firma normalizando los nombres de roles para evitar duplicados
         const signatureRoles = Object.keys(signatures).map(role => role.toLowerCase());
@@ -430,122 +454,143 @@ function App() {
             const role = uniqueRoles[i];
             
             // Verificar si hay suficiente espacio para la firma en la página actual
-            if (currentY + 50 > doc.internal.pageSize.height - 30) {
+            if (currentY + 50 > pageHeight - 40) {
                 doc.addPage();
-                currentY = 20;
+                currentY = 40; // Iniciar en una posición más baja en la nueva página
+                addHeaderAndFooter(doc); // Añadir encabezado y pie de página en la nueva página
             }
             
             // Formatear el texto del rol para mostrar con la primera letra en mayúscula
             const displayRole = role.charAt(0).toUpperCase() + role.slice(1);
             
             if (signatures[role]?.data) {
-                doc.addImage(signatures[role].data, 'PNG', 10, currentY, 50, 30);
-                doc.text(`Firma de ${displayRole}`, 10, currentY + 40);
+                doc.addImage(signatures[role].data, 'PNG', margin, currentY, 60, 40);
+                doc.setFontSize(10).setFont('helvetica', 'normal');
+                doc.text(`Firma de ${displayRole}`, margin, currentY + 50);
             } else {
-                doc.text(`Firma de ${displayRole}: No firmado`, 10, currentY);
+                doc.setFontSize(10).setFont('helvetica', 'normal');
+                doc.text(`Firma de ${displayRole}: No firmado`, margin, currentY + 10);
             }
             
-            currentY += 50; // Espacio para cada firma
+            currentY += 60; // Más espacio para cada firma
         }
 
-        // Observaciones generales
+        // Observaciones generales con mejor formato
         if (generalObservations) {
             // Verificar si hay suficiente espacio para las observaciones
-            if (currentY + 30 > doc.internal.pageSize.height - 30) {
+            if (currentY + 50 > pageHeight - 40) {
                 doc.addPage();
-                currentY = 20;
+                currentY = 40; // Iniciar en una posición más baja en la nueva página
+                addHeaderAndFooter(doc); // Añadir encabezado y pie de página en la nueva página
             }
             
-            doc.setFontSize(12).setFont('helvetica', 'bold').text('Observaciones Generales:', 10, currentY);
-            currentY += 7;
+            doc.setFontSize(14).setFont('helvetica', 'bold').text('Observaciones Generales:', margin, currentY);
+            currentY += 10;
             
-            doc.setFont('helvetica', 'normal').text(
-                doc.splitTextToSize(generalObservations, 190), 
-                10, 
-                currentY
-            );
+            doc.setFontSize(10).setFont('helvetica', 'normal');
+            const textLines = doc.splitTextToSize(generalObservations, pageWidth - (margin * 2));
+            doc.text(textLines, margin, currentY);
             
-            currentY += 20; // Espacio después de las observaciones
+            currentY += (textLines.length * 7) + 15; // Espacio después de las observaciones
         }
         
         // Agregar evidencia fotográfica al PDF si hay fotos
         if (photos && photos.length > 0) {
             // Verificar si hay suficiente espacio para el título de la sección
-            if (currentY + 30 > doc.internal.pageSize.height - 30) {
+            if (currentY + 40 > pageHeight - 40) {
                 doc.addPage();
-                currentY = 20;
+                currentY = 40; // Iniciar en una posición más baja en la nueva página
+                addHeaderAndFooter(doc); // Añadir encabezado y pie de página en la nueva página
             }
             
-            doc.setFontSize(12).setFont('helvetica', 'bold').text('Evidencia Fotográfica:', 10, currentY);
-            currentY += 10;
+            doc.setFontSize(14).setFont('helvetica', 'bold').text('Evidencia Fotográfica:', margin, currentY);
+            currentY += 15;
             
             // Añadir cada foto con su descripción
             for (let i = 0; i < photos.length; i++) {
                 const photo = photos[i];
                 
                 // Verificar si hay suficiente espacio para la foto
-                if (currentY + 110 > doc.internal.pageSize.height - 30) {
+                if (currentY + 110 > pageHeight - 40) {
                     doc.addPage();
-                    currentY = 20;
+                    currentY = 40; // Iniciar en una posición más baja en la nueva página
+                    addHeaderAndFooter(doc); // Añadir encabezado y pie de página en la nueva página
                 }
                 
                 // Añadir imagen
                 try {
-                    doc.addImage(photo.preview, 'JPEG', 10, currentY, 80, 80);
+                    doc.addImage(photo.preview, 'JPEG', margin, currentY, 80, 80);
                     
                     // Añadir descripción y fecha
-                    doc.setFontSize(10).setFont('helvetica', 'bold');
-                    doc.text(`Foto ${i + 1}:`, 100, currentY + 10);
+                    doc.setFontSize(11).setFont('helvetica', 'bold');
+                    doc.text(`Foto ${i + 1}:`, margin + 90, currentY + 10);
                     
                     doc.setFontSize(10).setFont('helvetica', 'normal');
-                    const lines = doc.splitTextToSize(photo.description || 'Sin descripción', 90);
-                    doc.text(lines, 100, currentY + 20);
+                    const lines = doc.splitTextToSize(photo.description || 'Sin descripción', pageWidth - margin - (margin + 90) - 10);
+                    doc.text(lines, margin + 90, currentY + 20);
                     
                     // Añadir fecha
                     const photoDate = new Date(photo.timestamp);
                     const formattedDate = `${photoDate.toLocaleDateString()} ${photoDate.toLocaleTimeString()}`;
-                    doc.text(`Fecha: ${formattedDate}`, 100, currentY + 40 + (lines.length * 5));
+                    doc.text(`Fecha: ${formattedDate}`, margin + 90, currentY + 40 + (lines.length * 5));
                     
-                    currentY += 90; // Espacio para la siguiente foto
+                    currentY += 95; // Espacio para la siguiente foto
                 } catch (error) {
                     console.error('Error al agregar la imagen al PDF:', error);
                     
                     // En caso de error, añadir texto indicando el problema
                     doc.setFontSize(10).setFont('helvetica', 'italic');
-                    doc.text(`[No se pudo incluir la foto ${i + 1}]`, 10, currentY);
+                    doc.text(`[No se pudo incluir la foto ${i + 1}]`, margin, currentY);
                     currentY += 15;
                 }
             }
         }
         
-        // Agregar pie de página a todas las páginas
+        // Agregar encabezado y pie de página a todas las páginas
         const totalPages = doc.internal.getNumberOfPages();
         for (let i = 1; i <= totalPages; i++) {
             doc.setPage(i);
-            
-            try {
-                // Banner del pie de página
-                doc.addImage(FOOTER_BANNER, 'JPEG', 0, doc.internal.pageSize.height - 25, doc.internal.pageSize.width, 25);
-                
-                // Eliminamos el número de página para no interferir con el logo
-            } catch (error) {
-                console.error('Error al cargar la imagen del pie de página:', error);
-                
-                // Línea separadora en caso de error
-                doc.setDrawColor(12, 35, 64);
-                doc.line(10, doc.internal.pageSize.height - 20, doc.internal.pageSize.width - 10, doc.internal.pageSize.height - 20);
-                
-                // Texto del pie de página
-                doc.setFontSize(8).setFont('helvetica', 'normal');
-                doc.setTextColor(0, 0, 0);
-                doc.text('Calle 34 No. 43-31. Barranquilla.Colombia', 105, doc.internal.pageSize.height - 15, { align: 'center' });
-                doc.text('BARRANQUILLA.GOV.CO', 105, doc.internal.pageSize.height - 10, { align: 'center' });
-                
-                // No agregamos el número de página en el caso de error tampoco
-            }
+            addHeaderAndFooter(doc);
         }
 
         doc.save('reporte-supervision.pdf');
+    };
+    
+    // Función para añadir encabezado y pie de página
+    const addHeaderAndFooter = (doc) => {
+        const pageWidth = doc.internal.pageSize.width;
+        const pageHeight = doc.internal.pageSize.height;
+        
+        try {
+            // Encabezado con logo en todas las páginas - ajustado para que no ocupe tanto espacio
+            doc.addImage(HEADER_LOGO, 'JPEG', 0, 0, pageWidth, 30);
+            
+            // Banner del pie de página - ajustado para que no interfiera con el contenido
+            doc.addImage(FOOTER_BANNER, 'JPEG', 0, pageHeight - 20, pageWidth, 20);
+        } catch (error) {
+            console.error('Error al cargar las imágenes:', error);
+            
+            // Encabezado alternativo en caso de error
+            doc.setFillColor(12, 35, 64);
+            doc.rect(0, 0, pageWidth, 25, 'F');
+            
+            doc.setTextColor(255, 255, 255);
+            doc.setFontSize(16).setFont('helvetica', 'bold');
+            doc.text('ALCALDÍA DE BARRANQUILLA', pageWidth / 2, 15, { align: 'center' });
+            
+            doc.setFontSize(10).setFont('helvetica', 'normal');
+            doc.text('NIT: 890102018-1', pageWidth / 2, 22, { align: 'center' });
+            
+            // Línea separadora para el pie de página en caso de error
+            doc.setDrawColor(12, 35, 64);
+            doc.line(10, pageHeight - 20, pageWidth - 10, pageHeight - 20);
+            
+            // Texto del pie de página
+            doc.setFontSize(8).setFont('helvetica', 'normal');
+            doc.setTextColor(0, 0, 0);
+            doc.text('Calle 34 No. 43-31. Barranquilla.Colombia', pageWidth / 2, pageHeight - 15, { align: 'center' });
+            doc.text('BARRANQUILLA.GOV.CO', pageWidth / 2, pageHeight - 10, { align: 'center' });
+        }
     };
 
     return (
@@ -660,4 +705,4 @@ function App() {
     );
 }
 
-export default App;
+export default App
