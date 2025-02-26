@@ -319,7 +319,7 @@ function App() {
             ['Hora de Visita', headerData.horaVisita || 'N/A'],
             ['Espacio de Atención', headerData.espacioAtencion || 'N/A'],
             ['Apoyo a la supervisión quien realiza la visita', headerData.apoyoSupervision || 'N/A'],
-            ['Personas mayores asistentes', headerData.pmAsistentes || 'N/A'],
+            ['#Personas mayores asistentes', headerData.pmAsistentes || 'N/A'],
             ['Contratista', headerData.entidadContratista || 'N/A'],
             ['NIT', headerData.nit || 'N/A'],
             ['No de contrato', headerData.numeroContrato || 'N/A'],

@@ -151,7 +151,7 @@ const HeaderForm = ({ onDataChange, initialData = {} }) => {
                             />
                         </div>
 
-                        {/* Personas mayores asistentes (antes era pmAsistentes) */}
+                        {/* #Personas mayores asistentes (antes era pmAsistentes) */}
                         <div className="form-group">
                             <label className="form-label" htmlFor="pmAsistentes">Personas mayores asistentes:</label>
                             <input
