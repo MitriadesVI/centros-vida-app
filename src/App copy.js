@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ThemeProvider } from '@mui/material/styles';
-import { Container, Box, Button, Snackbar, Alert, Typography, Tab, Tabs, Paper } from '@mui/material';
+import { Container, Box, Button } from '@mui/material';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 
@@ -9,22 +9,11 @@ import ChecklistSection from './components/ChecklistSection';
 import SignatureCapture from './components/SignatureCapture';
 import Observations from './components/Observations';
 import PhotoCapture from './components/PhotoCapture';
-import SavedForms from './components/SavedForms';
 import checklistData from './data';
 import theme from './theme';
 import './components/ChecklistItem.css';
 
-import { 
-  saveFormToLocalStorage, 
-  getFormFromLocalStorage, 
-  markFormAsComplete,
-  cleanupOldForms
-} from './services/localStorageService';
-
 function App() {
-    // Estado para controlar el modo de visualización (formulario o lista de guardados)
-    const [viewMode, setViewMode] = useState('form'); // 'form' o 'saved'
-    
     // Estados para los diferentes componentes
     const [headerData, setHeaderData] = useState({});
     const [signatures, setSignatures] = useState({
@@ -34,130 +23,7 @@ function App() {
     const [generalObservations, setGeneralObservations] = useState('');
     const [checklistSectionsData, setChecklistSectionsData] = useState({});
     const [photos, setPhotos] = useState([]);
-    
-    // Estado para el formulario actual
-    const [currentFormId, setCurrentFormId] = useState(null);
-    const [formChanged, setFormChanged] = useState(false);
-    
-    // Estado para notificaciones
-    const [notification, setNotification] = useState({
-        open: false,
-        message: '',
-        severity: 'success'
-    });
-    
-    // Limpiar formularios antiguos al inicio
-    useEffect(() => {
-        cleanupOldForms();
-    }, []);
-    
-    // Efecto para autoguardado
-    useEffect(() => {
-        if (formChanged) {
-            const autoSaveTimer = setTimeout(() => {
-                saveCurrentForm();
-            }, 5000); // Autoguardar después de 5 segundos de inactividad
-            
-            return () => clearTimeout(autoSaveTimer);
-        }
-    }, [headerData, signatures, generalObservations, checklistSectionsData, photos, formChanged]);
-    
-    // Efecto para registrar cambios en los datos
-    useEffect(() => {
-        setFormChanged(true);
-    }, [headerData, signatures, generalObservations, checklistSectionsData, photos]);
-    
-    // Guardar el formulario actual
-    const saveCurrentForm = () => {
-        if (!formChanged) return;
-        
-        const formData = {
-            headerData,
-            signatures,
-            generalObservations,
-            checklistSectionsData,
-            photos
-        };
-        
-        const savedId = saveFormToLocalStorage(formData, currentFormId);
-        if (savedId && currentFormId !== savedId) {
-            setCurrentFormId(savedId);
-        }
-        
-        setFormChanged(false);
-        
-        // Mostrar notificación
-        setNotification({
-            open: true,
-            message: 'Formulario guardado automáticamente',
-            severity: 'success'
-        });
-    };
-    
-    // Cargar un formulario guardado
-    const loadSavedForm = (formId) => {
-        // Si no hay ID, crear un nuevo formulario
-        if (!formId) {
-            resetForm();
-            setViewMode('form');
-            return;
-        }
-        
-        const savedForm = getFormFromLocalStorage(formId);
-        if (savedForm && savedForm.data) {
-            const { data } = savedForm;
-            
-            // Cargar todos los datos del formulario
-            setHeaderData(data.headerData || {});
-            setSignatures(data.signatures || {
-                'apoyo a la supervisión quien realiza la visita': { data: '', checked: false },
-                'profesional/técnico del contratista quien atiende la visita': { data: '', checked: false },
-            });
-            setGeneralObservations(data.generalObservations || '');
-            setChecklistSectionsData(data.checklistSectionsData || {});
-            setPhotos(data.photos || []);
-            
-            // Actualizar el ID del formulario actual
-            setCurrentFormId(formId);
-            setFormChanged(false);
-            
-            // Cambiar al modo formulario
-            setViewMode('form');
-            
-            // Notificar al usuario
-            setNotification({
-                open: true,
-                message: 'Formulario cargado correctamente',
-                severity: 'success'
-            });
-        } else {
-            setNotification({
-                open: true,
-                message: 'No se pudo cargar el formulario',
-                severity: 'error'
-            });
-        }
-    };
-    
-    // Resetear el formulario
-    const resetForm = () => {
-        setHeaderData({});
-        setSignatures({
-            'apoyo a la supervisión quien realiza la visita': { data: '', checked: false },
-            'profesional/técnico del contratista quien atiende la visita': { data: '', checked: false },
-        });
-        setGeneralObservations('');
-        setChecklistSectionsData({});
-        setPhotos([]);
-        setCurrentFormId(null);
-        setFormChanged(false);
-    };
-    
-    // Cerrar notificación
-    const handleCloseNotification = () => {
-        setNotification({ ...notification, open: false });
-    };
-    
+
     useEffect(() => {
         console.log('Checklist Sections Data updated:', checklistSectionsData);
     }, [checklistSectionsData]);
@@ -258,11 +124,6 @@ function App() {
     };
 
     const generatePdf = () => {
-        // Guardar el formulario como completo antes de generar el PDF
-        if (currentFormId) {
-            markFormAsComplete(currentFormId);
-        }
-        
         const doc = new jsPDF();
         let currentY = 20; // Variable para controlar la posición vertical actual
         
@@ -437,104 +298,36 @@ function App() {
     return (
         <ThemeProvider theme={theme}>
             <Container maxWidth="lg">
-                {/* Pestañas para alternar entre formulario y formularios guardados */}
-                <Paper sx={{ position: 'sticky', top: 0, zIndex: 10 }}>
-                    <Tabs 
-                        value={viewMode} 
-                        onChange={(e, newValue) => {
-                            // Guardar el formulario actual antes de cambiar de vista
-                            if (formChanged && viewMode === 'form') {
-                                saveCurrentForm();
-                            }
-                            setViewMode(newValue);
-                        }}
-                        centered
-                    >
-                        <Tab label="Formulario Actual" value="form" />
-                        <Tab label="Formularios Guardados" value="saved" />
-                    </Tabs>
-                </Paper>
-                
-                {/* Mostrar el título con información del formulario actual */}
-                {viewMode === 'form' && (
-                    <Box sx={{ mt: 2, mb: 2, textAlign: 'center' }}>
-                        <Typography variant="h5">
-                            {currentFormId ? 'Editando Formulario' : 'Nuevo Formulario'}
-                        </Typography>
-                        <Typography variant="body2" color="textSecondary">
-                            {currentFormId 
-                                ? `ID: ${currentFormId.substring(0, 8)}... - Se guarda automáticamente` 
-                                : 'Los cambios se guardarán automáticamente'}
-                        </Typography>
+                <Box sx={{ py: 4 }}>
+                    <HeaderForm onDataChange={handleHeaderDataChange} />
+                    {checklistData.map((section) => (
+                        <ChecklistSection 
+                            key={section.title} 
+                            title={section.title} 
+                            items={section.items} 
+                            onSectionDataChange={handleSectionDataChange} 
+                        />
+                    ))}
+                    <SignatureCapture 
+                        label="apoyo a la supervisión quien realiza la visita" 
+                        onSignatureChange={handleSignatureChange} 
+                    />
+                    <SignatureCapture 
+                        label="profesional/técnico del contratista quien atiende la visita" 
+                        onSignatureChange={handleSignatureChange} 
+                    />
+                    <Observations onObservationsChange={handleObservationsChange} />
+                    <PhotoCapture onPhotosChange={handlePhotosChange} />
+                    <Box sx={{ mt: 3, textAlign: 'center' }}>
+                        <Button 
+                            variant="contained" 
+                            onClick={generatePdf} 
+                            sx={{ padding: '10px 30px', fontSize: '1.1rem' }}
+                        >
+                            Generar PDF
+                        </Button>
                     </Box>
-                )}
-                
-                {viewMode === 'form' ? (
-                    <Box sx={{ py: 4 }}>
-                        <HeaderForm 
-                            onDataChange={handleHeaderDataChange} 
-                            initialData={headerData}
-                        />
-                        {checklistData.map((section) => (
-                            <ChecklistSection 
-                                key={section.title} 
-                                title={section.title} 
-                                items={section.items} 
-                                onSectionDataChange={handleSectionDataChange}
-                                initialData={checklistSectionsData[section.title]} 
-                            />
-                        ))}
-                        <SignatureCapture 
-                            label="apoyo a la supervisión quien realiza la visita" 
-                            onSignatureChange={handleSignatureChange}
-                            initialData={signatures['apoyo a la supervisión quien realiza la visita']} 
-                        />
-                        <SignatureCapture 
-                            label="profesional/técnico del contratista quien atiende la visita" 
-                            onSignatureChange={handleSignatureChange}
-                            initialData={signatures['profesional/técnico del contratista quien atiende la visita']} 
-                        />
-                        <Observations 
-                            onObservationsChange={handleObservationsChange}
-                            initialData={generalObservations}
-                        />
-                        <PhotoCapture 
-                            onPhotosChange={handlePhotosChange}
-                            initialData={photos}
-                        />
-                        <Box sx={{ mt: 3, textAlign: 'center', display: 'flex', justifyContent: 'center', gap: 2 }}>
-                            <Button 
-                                variant="contained" 
-                                onClick={generatePdf} 
-                                sx={{ padding: '10px 30px', fontSize: '1.1rem' }}
-                            >
-                                Generar PDF
-                            </Button>
-                            <Button 
-                                variant="outlined" 
-                                onClick={saveCurrentForm} 
-                                sx={{ padding: '10px 30px', fontSize: '1.1rem' }}
-                                disabled={!formChanged}
-                            >
-                                Guardar
-                            </Button>
-                        </Box>
-                    </Box>
-                ) : (
-                    <SavedForms onLoadForm={loadSavedForm} />
-                )}
-                
-                {/* Notificaciones */}
-                <Snackbar 
-                    open={notification.open} 
-                    autoHideDuration={4000} 
-                    onClose={handleCloseNotification}
-                    anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-                >
-                    <Alert onClose={handleCloseNotification} severity={notification.severity}>
-                        {notification.message}
-                    </Alert>
-                </Snackbar>
+                </Box>
             </Container>
         </ThemeProvider>
     );

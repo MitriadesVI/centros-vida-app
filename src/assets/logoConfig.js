@@ -1,6 +1,9 @@
+// src/assets/logoConfig.js
+import membreteDistrito from './membrete distrito.jpg';
+
 export const convertImageToBase64 = async () => {
     try {
-        const response = await fetch('/membrete distrito.jpg');
+        const response = await fetch(membreteDistrito);
         const blob = await response.blob();
         
         return new Promise((resolve, reject) => {

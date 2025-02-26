@@ -1,33 +1,65 @@
 .checklist-item {
-    display: flex;
-    flex-direction: column; /* Apila los elementos verticalmente */
-    margin-bottom: 10px; /* Espacio entre ítems */
+    margin-bottom: 15px;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 10px;
 }
 
-.checklist-label {
-    font-weight: bold;
-    margin-bottom: 5px; /* Espacio entre etiqueta y select/observaciones */
+.checklist-item-header {
+    display: flex;
+    margin-bottom: 8px;
+    align-items: center;
 }
-.selection-container{
+
+.checklist-item-number {
+    font-weight: bold;
+    margin-right: 5px;
+    flex-shrink: 0;
+}
+
+.checklist-item-label {
+    font-weight: normal;
+    line-height: 1.4;
+}
+
+.checklist-item-content {
+    display: flex;
+}
+
+.checklist-item-values {
     display: flex;
     align-items: center;
-    gap: 15px;
-    margin-bottom: 5px;
 }
 
-.select-input {
-    margin-right: 10px; /* Espacio entre select y textarea */
-    padding: 5px;
-    border: 1px solid #ccc;
-    border-radius: 4px;
-    font-size: 16px;
+.value {
+    margin-left: 25px; /* Para alinear con el texto */
 }
 
-.observation-input {
-    padding: 5px;
+.condition-select {
+    padding: 6px 8px;
     border: 1px solid #ccc;
     border-radius: 4px;
+    width: 80px;
+    background-color: white;
     font-size: 14px;
-    resize: vertical; /* Permite redimensionar verticalmente */
-    width: 95%; /* Ocupa todo el ancho disponible */
+}
+
+/* Para pantallas más pequeñas */
+@media (max-width: 576px) {
+    .checklist-item-header {
+        flex-direction: row;
+        flex-wrap: wrap;
+    }
+    
+    .checklist-item-label {
+        flex: 1;
+        min-width: 80%;
+    }
+    
+    .checklist-item-content {
+        margin-top: 5px;
+    }
+    
+    .value {
+        margin-left: 20px;
+    }
 }

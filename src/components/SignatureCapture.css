@@ -1,35 +1,80 @@
-.signature-capture {
-    margin: 20px 0;
-    padding: 15px;
-    border: 1px solid #ddd;
+/* Estilos para el componente de captura de firma */
+.signature-container {
+    margin-top: 10px;
+    position: relative;
+}
+
+.signature-field-container {
+    position: relative;
+    border: 1px solid #ccc;
     border-radius: 4px;
-}
-
-.signature-capture h3 {
+    background-color: #fff;
+    height: 200px;
+    width: 100%;
     margin-bottom: 10px;
-    color: #333;
-}
-
-.canvas-container {
-    margin: 10px 0;
-    display: flex;
-    justify-content: center;
+    overflow: hidden;
 }
 
 .signature-canvas {
-    max-width: 100%;
-    touch-action: none;
+    display: block;
+    background-color: #fff;
+    cursor: crosshair;
+    width: 100%;
+    height: 100%;
+    touch-action: none; /* Importante para eventos táctiles */
+}
+
+.signature-placeholder {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: #aaa;
+    font-style: italic;
+    pointer-events: none; /* Para que los clics pasen al canvas */
+}
+
+.signature-actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 10px;
 }
 
 .clear-button {
     padding: 8px 16px;
-    background-color: #f0f0f0;
-    border: 1px solid #ddd;
+    background-color: #f2f2f2;
+    border: 1px solid #ccc;
     border-radius: 4px;
     cursor: pointer;
-    margin-top: 10px;
+    font-size: 14px;
 }
 
 .clear-button:hover {
-    background-color: #e0e0e0;
+    background-color: #e6e6e6;
+}
+
+.checkbox-container {
+    display: flex;
+    align-items: center;
+}
+
+.checkbox-container input[type="checkbox"] {
+    margin-right: 8px;
+}
+
+/* Estilos responsivos */
+@media (max-width: 768px) {
+    .signature-field-container {
+        height: 150px; /* Más pequeño en móviles */
+    }
+    
+    .signature-actions {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    
+    .checkbox-container {
+        margin-top: 10px;
+    }
 }

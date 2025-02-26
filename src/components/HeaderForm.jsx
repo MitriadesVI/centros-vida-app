@@ -1,8 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import '../styles/forms.css';
 
-const HeaderForm = ({ onDataChange }) => {
+const HeaderForm = ({ onDataChange, initialData = {} }) => {
     const [formData, setFormData] = useState(() => {
+        // Si recibimos datos iniciales, los usamos; de lo contrario, intentamos cargar de localStorage
+        if (Object.keys(initialData).length > 0) {
+            return initialData;
+        }
+        
         const savedData = localStorage.getItem('headerData');
         if (savedData) {
             try {
@@ -16,22 +21,27 @@ const HeaderForm = ({ onDataChange }) => {
         return {};
     });
 
+    // Efecto para establecer fecha y hora si es un formulario nuevo
     useEffect(() => {
-        const now = new Date();
-        const currentDate = now.toISOString().split('T')[0];
-        const currentTime = now.toLocaleTimeString('es-CO', {
-            hour: '2-digit',
-            minute: '2-digit',
-            hour12: false
-        });
+        // Solo establecer fecha y hora si es un formulario nuevo (sin datos iniciales)
+        if (Object.keys(initialData).length === 0 && (!formData.fechaVisita || !formData.horaVisita)) {
+            const now = new Date();
+            const currentDate = now.toISOString().split('T')[0];
+            const currentTime = now.toLocaleTimeString('es-CO', {
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false
+            });
 
-        setFormData(prevData => ({
-            ...prevData,
-            fechaVisita: currentDate,
-            horaVisita: currentTime
-        }));
-    }, []);
+            setFormData(prevData => ({
+                ...prevData,
+                fechaVisita: currentDate,
+                horaVisita: currentTime
+            }));
+        }
+    }, [initialData, formData]);
 
+    // Efecto para guardar en localStorage cuando el componente se desmonte
     useEffect(() => {
         return () => {
             try {
@@ -42,11 +52,15 @@ const HeaderForm = ({ onDataChange }) => {
         };
     }, [formData]);
 
+    // Efecto para notificar al componente padre de los cambios
+    useEffect(() => {
+        onDataChange(formData);
+    }, [formData, onDataChange]);
+
     const handleChange = (e) => {
         const { name, value } = e.target;
         const updatedFormData = { ...formData, [name]: value };
         setFormData(updatedFormData);
-        onDataChange(updatedFormData);
     };
 
     const clearForm = () => {
@@ -65,7 +79,6 @@ const HeaderForm = ({ onDataChange }) => {
 
         setFormData(clearedData);
         localStorage.setItem('headerData', JSON.stringify(clearedData));
-        onDataChange(clearedData);
     };
 
     return (
