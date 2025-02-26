@@ -1,42 +1,157 @@
-/* Añadir estos estilos al final de tu archivo forms.css */
+/* forms.css - Estilos generales para formularios */
 
+/* Contenedor principal del formulario */
+.form-container {
+  max-width: 100%;
+  margin-bottom: 25px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen,
+  Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif;
+}
+
+/* Secciones del formulario */
+.form-section {
+  background-color: #ffffff;
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 20px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* Títulos de sección */
+.section-title {
+  color: #2c3e50;
+  font-size: 18px;
+  margin-top: 0;
+  margin-bottom: 15px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #eaeaea;
+}
+
+/* Grupos de formularios */
+.form-group {
+  margin-bottom: 15px;
+}
+
+/* Etiquetas de formulario */
+.form-label {
+  display: block;
+  margin-bottom: 6px;
+  font-weight: 500;
+  color: #333;
+}
+
+/* Campos de entrada */
+.form-control {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+  line-height: 1.5;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.form-control:focus {
+  border-color: #3498db;
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.25);
+}
+
+/* Botones */
+button {
+  cursor: pointer;
+  transition: background-color 0.2s, border-color 0.2s;
+}
+
+button:focus {
+  outline: none;
+}
+
+/* Encabezado de formulario */
+.form-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #eaeaea;
+}
+
+/* Botón de limpiar */
+.clear-button {
+  padding: 8px 16px;
+  background-color: #f8f9fa;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  color: #555;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.clear-button:hover {
+  background-color: #e9ecef;
+  border-color: #ccc;
+}
+
+/* Área de texto para observaciones */
 .observations-section {
   background-color: #f9f9f9;
   border-radius: 8px;
-  padding: 15px;
+  padding: 20px;
   margin-top: 25px;
   border-left: 4px solid #2196F3;
 }
 
 .observations-textarea {
   width: 100%;
-  padding: 10px;
+  padding: 12px;
   border: 1px solid #ccc;
   border-radius: 4px;
   font-size: 15px;
   line-height: 1.5;
   min-height: 120px;
+  resize: vertical;
+}
+
+.observations-textarea:focus {
+  border-color: #2196F3;
+  box-shadow: 0 0 0 3px rgba(33, 150, 243, 0.2);
 }
 
 .help-text {
   color: #666;
   font-size: 13px;
-  margin-top: 5px;
+  margin-top: 8px;
   font-style: italic;
 }
 
+/* Contenedor de items de checklist */
 .checklist-items-container {
   max-width: 100%;
 }
 
-/* Mejoras en la visualización para dispositivos móviles */
+/* Mejoras de accesibilidad */
+input:focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  border-color: #2196F3;
+  box-shadow: 0 0 0 3px rgba(33, 150, 243, 0.2);
+}
+
+/* Estilos responsivos */
 @media (max-width: 768px) {
   .form-section {
-      padding: 12px;
+      padding: 15px;
   }
   
   .section-title {
-      font-size: 18px;
+      font-size: 16px;
+  }
+  
+  .form-control {
+      padding: 8px 10px;
+      font-size: 14px;
   }
   
   .observations-textarea {
@@ -44,9 +159,14 @@
   }
 }
 
-/* Mejoras de accesibilidad */
-.condition-select:focus,
-.observations-textarea:focus {
-  outline: 2px solid #2196F3;
-  box-shadow: 0 0 3px rgba(33, 150, 243, 0.6);
+/* Para pantallas muy pequeñas */
+@media (max-width: 480px) {
+  .form-header {
+      flex-direction: column;
+      align-items: flex-start;
+  }
+  
+  .clear-button {
+      margin-top: 10px;
+  }
 }

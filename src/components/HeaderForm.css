@@ -1,0 +1,120 @@
+/* HeaderForm.css - Estilos específicos para el formulario de encabezado */
+
+.form-title {
+    color: #2c3e50;
+    font-size: 24px;
+    margin-bottom: 15px;
+    border-bottom: 2px solid #3498db;
+    padding-bottom: 8px;
+    width: 100%;
+}
+
+.header-section {
+    background-color: #f8f9fa;
+    border-radius: 6px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    margin-bottom: 20px;
+    border-left: 3px solid #3498db;
+}
+
+.header-form-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 15px;
+    margin-top: 12px;
+}
+
+.form-label {
+    display: block;
+    margin-bottom: 6px;
+    font-weight: 600;
+    color: #333;
+    font-size: 14px;
+}
+
+.form-control {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+    transition: border-color 0.2s;
+}
+
+.form-control:focus {
+    border-color: #3498db;
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
+}
+
+.date-input, .time-input {
+    background-color: #f0f7ff;
+    color: #2c3e50;
+    font-weight: 500;
+}
+
+.clear-button {
+    background-color: #f8f9fa;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    padding: 8px 12px;
+    font-size: 14px;
+    color: #555;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.clear-button:hover {
+    background-color: #e9ecef;
+    border-color: #ccc;
+}
+
+.form-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.section-title {
+    color: #2c3e50;
+    font-size: 18px;
+    margin-bottom: 10px;
+    padding-bottom: 5px;
+    border-bottom: 1px solid #e9ecef;
+}
+
+/* Estilos responsivos */
+@media (max-width: 768px) {
+    .header-form-grid {
+        grid-template-columns: 1fr;
+        gap: 10px;
+    }
+    
+    .form-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    
+    .clear-button {
+        margin-top: 10px;
+        align-self: flex-end;
+    }
+    
+    .form-title {
+        font-size: 20px;
+    }
+    
+    .form-section {
+        padding: 12px;
+    }
+    
+    .form-label {
+        font-size: 13px;
+    }
+    
+    .form-control {
+        padding: 8px;
+        font-size: 13px;
+    }
+}

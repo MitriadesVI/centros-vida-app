@@ -10,15 +10,16 @@ import SignatureCapture from './components/SignatureCapture';
 import Observations from './components/Observations';
 import PhotoCapture from './components/PhotoCapture';
 import SavedForms from './components/SavedForms';
+import GeoLocationCapture from './components/GeoLocationCapture';
 import checklistData from './data';
 import theme from './theme';
 import './components/ChecklistItem.css';
 
 import { 
-  saveFormToLocalStorage, 
-  getFormFromLocalStorage, 
-  markFormAsComplete,
-  cleanupOldForms
+    saveFormToLocalStorage, 
+    getFormFromLocalStorage, 
+    markFormAsComplete,
+    cleanupOldForms
 } from './services/localStorageService';
 
 function App() {
@@ -34,6 +35,7 @@ function App() {
     const [generalObservations, setGeneralObservations] = useState('');
     const [checklistSectionsData, setChecklistSectionsData] = useState({});
     const [photos, setPhotos] = useState([]);
+    const [geoLocation, setGeoLocation] = useState({});
     
     // Estado para el formulario actual
     const [currentFormId, setCurrentFormId] = useState(null);
@@ -60,12 +62,12 @@ function App() {
             
             return () => clearTimeout(autoSaveTimer);
         }
-    }, [headerData, signatures, generalObservations, checklistSectionsData, photos, formChanged]);
+    }, [headerData, signatures, generalObservations, checklistSectionsData, photos, geoLocation, formChanged]);
     
     // Efecto para registrar cambios en los datos
     useEffect(() => {
         setFormChanged(true);
-    }, [headerData, signatures, generalObservations, checklistSectionsData, photos]);
+    }, [headerData, signatures, generalObservations, checklistSectionsData, photos, geoLocation]);
     
     // Guardar el formulario actual
     const saveCurrentForm = () => {
@@ -76,7 +78,8 @@ function App() {
             signatures,
             generalObservations,
             checklistSectionsData,
-            photos
+            photos,
+            geoLocation
         };
         
         const savedId = saveFormToLocalStorage(formData, currentFormId);
@@ -116,6 +119,7 @@ function App() {
             setGeneralObservations(data.generalObservations || '');
             setChecklistSectionsData(data.checklistSectionsData || {});
             setPhotos(data.photos || []);
+            setGeoLocation(data.geoLocation || {});
             
             // Actualizar el ID del formulario actual
             setCurrentFormId(formId);
@@ -149,6 +153,7 @@ function App() {
         setGeneralObservations('');
         setChecklistSectionsData({});
         setPhotos([]);
+        setGeoLocation({});
         setCurrentFormId(null);
         setFormChanged(false);
     };
@@ -176,6 +181,11 @@ function App() {
     const handlePhotosChange = (newPhotos) => {
         console.log('Fotos actualizadas:', newPhotos);
         setPhotos(newPhotos);
+    };
+    
+    const handleGeoLocationChange = (location) => {
+        setGeoLocation(location);
+        setFormChanged(true);
     };
     
     const handleSectionDataChange = (sectionTitle, sectionData) => {
@@ -266,7 +276,24 @@ function App() {
         const doc = new jsPDF();
         let currentY = 20; // Variable para controlar la posición vertical actual
         
+        // Encabezado con texto estilizado
+        doc.setFillColor(12, 35, 64); // Color azul oscuro institucional
+        doc.rect(0, 0, doc.internal.pageSize.width, 25, 'F');
+        
+        // Texto del encabezado
+        doc.setTextColor(255, 255, 255); // Texto blanco
+        doc.setFontSize(16).setFont('helvetica', 'bold');
+        doc.text('ALCALDÍA DE BARRANQUILLA', 105, 15, { align: 'center' });
+        
+        // Texto adicional
+        doc.setFontSize(10).setFont('helvetica', 'normal');
+        doc.text('NIT: 890102018-1', 105, 22, { align: 'center' });
+        
+        // Ajustar posición inicial
+        currentY += 15;
+        
         // Título del reporte
+        doc.setTextColor(0, 0, 0); // Texto negro
         doc.setFontSize(16).setFont('helvetica', 'bold').text('Reporte de Supervisión - Centros de Vida', 105, currentY, { align: 'center' });
         currentY += 10;
 
@@ -305,6 +332,59 @@ function App() {
         });
         
         currentY = doc.lastAutoTable.finalY + 10;
+        
+        // Añadir información de geolocalización si está disponible
+        if (geoLocation && (geoLocation.latitude || geoLocation.longitude)) {
+            // Verificar si hay suficiente espacio para la sección
+            if (currentY + 60 > doc.internal.pageSize.height - 20) {
+                doc.addPage();
+                currentY = 20;
+            }
+            
+            // Tabla para la geolocalización
+            const geoRows = [];
+            
+            if (geoLocation.latitude && geoLocation.longitude) {
+                geoRows.push(['Latitud', geoLocation.latitude.toFixed(6)]);
+                geoRows.push(['Longitud', geoLocation.longitude.toFixed(6)]);
+            }
+            
+            if (geoLocation.accuracy) {
+                geoRows.push(['Precisión', `±${geoLocation.accuracy.toFixed(0)} metros`]);
+            }
+            
+            if (geoLocation.timestamp) {
+                geoRows.push(['Registrado', new Date(geoLocation.timestamp).toLocaleString()]);
+            }
+            
+            if (geoLocation.address) {
+                geoRows.push(['Dirección aproximada', geoLocation.address]);
+            }
+            
+            if (geoRows.length > 0) {
+                doc.autoTable({
+                    head: [['Georreferenciación de la Visita', 'Datos']],
+                    body: geoRows,
+                    startY: currentY,
+                    theme: 'grid',
+                    styles: {
+                        fontSize: 10,
+                        cellPadding: 5
+                    },
+                    headStyles: {
+                        fillColor: [30, 136, 229],
+                        textColor: 255,
+                        fontSize: 11
+                    },
+                    columnStyles: {
+                        0: { cellWidth: 60 },
+                        1: { cellWidth: 'auto' }
+                    }
+                });
+                
+                currentY = doc.lastAutoTable.finalY + 10;
+            }
+        }
 
         // Tabla de checklist
         doc.autoTable({ 
@@ -333,7 +413,6 @@ function App() {
         currentY += 10;
 
         // Procesar cada firma normalizando los nombres de roles para evitar duplicados
-        const processedRoles = new Set();
         const signatureRoles = Object.keys(signatures).map(role => role.toLowerCase());
         
         // Eliminar duplicados usando un Set
@@ -430,6 +509,25 @@ function App() {
                 }
             }
         }
+        
+        // Agregar pie de página a todas las páginas
+        const totalPages = doc.internal.getNumberOfPages();
+        for (let i = 1; i <= totalPages; i++) {
+            doc.setPage(i);
+            
+            // Línea separadora
+            doc.setDrawColor(12, 35, 64);
+            doc.line(10, doc.internal.pageSize.height - 20, doc.internal.pageSize.width - 10, doc.internal.pageSize.height - 20);
+            
+            // Texto del pie de página
+            doc.setFontSize(8).setFont('helvetica', 'normal');
+            doc.setTextColor(0, 0, 0);
+            doc.text('Calle 34 No. 43-31. Barranquilla.Colombia', 105, doc.internal.pageSize.height - 15, { align: 'center' });
+            doc.text('BARRANQUILLA.GOV.CO', 105, doc.internal.pageSize.height - 10, { align: 'center' });
+            
+            // Número de página
+            doc.text(`Página ${i} de ${totalPages}`, doc.internal.pageSize.width - 20, doc.internal.pageSize.height - 10);
+        }
 
         doc.save('reporte-supervision.pdf');
     };
@@ -475,6 +573,12 @@ function App() {
                             onDataChange={handleHeaderDataChange} 
                             initialData={headerData}
                         />
+                        
+                        <GeoLocationCapture 
+                            onLocationChange={handleGeoLocationChange} 
+                            initialData={geoLocation}
+                        />
+                        
                         {checklistData.map((section) => (
                             <ChecklistSection 
                                 key={section.title} 
