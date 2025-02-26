@@ -210,7 +210,7 @@ function App() {
             
             // Encabezado de la sección con más espacio y mejor formato
             tableRows.push([{ 
-                content: section.title, 
+                content: section.title.toUpperCase(), 
                 colSpan: 2, 
                 styles: { 
                     fillColor: [30, 136, 229], 
@@ -232,7 +232,7 @@ function App() {
                         halign: 'center', 
                         fillColor: [240, 240, 240], 
                         cellWidth: 140, // Ajustar ancho de la columna criterio
-                        fontSize: 10,
+                        fontSize: 11,
                         cellPadding: 8
                     } 
                 },
@@ -243,7 +243,7 @@ function App() {
                         halign: 'center', 
                         fillColor: [240, 240, 240], 
                         cellWidth: 50, // Ajustar ancho de la columna condición
-                        fontSize: 10,
+                        fontSize: 11,
                         cellPadding: 8
                     } 
                 }
@@ -295,6 +295,29 @@ function App() {
             margins: { top: 40, bottom: 40, left: 20, right: 20 }
         });
         
+        // Función para estandarizar las cabeceras de tablas
+        const standardTableHead = (title1, title2) => {
+            return [[{ 
+                content: title1, 
+                styles: { 
+                    halign: 'center',
+                    fillColor: [30, 136, 229], 
+                    textColor: 255, 
+                    fontSize: 12,
+                    fontStyle: 'bold'
+                } 
+            }, { 
+                content: title2, 
+                styles: { 
+                    halign: 'center',
+                    fillColor: [30, 136, 229], 
+                    textColor: 255, 
+                    fontSize: 12,
+                    fontStyle: 'bold'
+                } 
+            }]]
+        };
+        
         // Definir márgenes para el contenido
         const pageWidth = doc.internal.pageSize.width;
         const pageHeight = doc.internal.pageSize.height;
@@ -319,7 +342,7 @@ function App() {
             ['Hora de Visita', headerData.horaVisita || 'N/A'],
             ['Espacio de Atención', headerData.espacioAtencion || 'N/A'],
             ['Apoyo a la supervisión quien realiza la visita', headerData.apoyoSupervision || 'N/A'],
-            ['#Personas mayores asistentes', headerData.pmAsistentes || 'N/A'],
+            ['Personas mayores asistentes', headerData.pmAsistentes || 'N/A'],
             ['Contratista', headerData.entidadContratista || 'N/A'],
             ['NIT', headerData.nit || 'N/A'],
             ['No de contrato', headerData.numeroContrato || 'N/A'],
@@ -330,7 +353,7 @@ function App() {
 
         // Tabla de datos de la visita con mejor formato
         doc.autoTable({ 
-            head: [['Datos de la Visita', 'Información']], 
+            head: standardTableHead('Datos de la Visita', 'Información'), 
             body: headerRows, 
             startY: currentY, 
             theme: 'grid',
@@ -338,12 +361,6 @@ function App() {
                 fontSize: 10,
                 cellPadding: 6,
                 overflow: 'linebreak'
-            },
-            headStyles: {
-                fillColor: [30, 136, 229],
-                textColor: 255,
-                fontSize: 12,
-                halign: 'center'
             },
             margin: { left: margin, right: margin },
             columnStyles: {
@@ -384,7 +401,7 @@ function App() {
             
             if (geoRows.length > 0) {
                 doc.autoTable({
-                    head: [['Georreferenciación de la Visita', 'Datos']],
+                    head: standardTableHead('Georreferenciación de la Visita', 'Datos'),
                     body: geoRows,
                     startY: currentY,
                     theme: 'grid',
@@ -392,12 +409,6 @@ function App() {
                         fontSize: 10,
                         cellPadding: 6,
                         overflow: 'linebreak'
-                    },
-                    headStyles: {
-                        fillColor: [30, 136, 229],
-                        textColor: 255,
-                        fontSize: 12,
-                        halign: 'center'
                     },
                     margin: { left: margin, right: margin },
                     columnStyles: {
