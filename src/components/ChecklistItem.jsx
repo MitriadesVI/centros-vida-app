@@ -2,18 +2,19 @@ import React, { useState, useEffect } from 'react';
 import './ChecklistItem.css';
 
 const ChecklistItem = ({ id, number, label, onChange, initialData = {} }) => {
-    const [selectedValue, setSelectedValue] = useState(initialData?.value || null);
+    const [selectedValue, setSelectedValue] = useState(initialData?.value !== undefined ? initialData.value : null);
     const [displayText, setDisplayText] = useState(initialData?.displayText || 'N/A');
 
     // Cuando cambia el valor seleccionado, actualiza los datos y notifica al padre
     useEffect(() => {
         const newData = {
             value: selectedValue,
-            displayText: displayText
+            displayText: displayText,
+            label: label
         };
         
         onChange(id, newData);
-    }, [selectedValue, displayText, id, onChange]);
+    }, [selectedValue, displayText, id, onChange, label]);
 
     // Actualiza el texto de visualización cuando cambia el valor seleccionado
     useEffect(() => {
@@ -52,7 +53,7 @@ const ChecklistItem = ({ id, number, label, onChange, initialData = {} }) => {
                 <div className="checklist-item-values">
                     <div className="value">
                         <select 
-                            value={selectedValue || 'N/A'} 
+                            value={selectedValue !== null && selectedValue !== undefined ? selectedValue : 'N/A'} 
                             onChange={handleValueChange}
                             className="condition-select"
                         >

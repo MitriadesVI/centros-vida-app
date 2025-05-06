@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import '../styles/forms.css';
 import './HeaderForm.css';
+import contratistas from '../data/contratistas'; // Importamos los datos de contratistas
 
-const HeaderForm = ({ onDataChange, initialData = {} }) => {
+const HeaderForm = ({ onDataChange, initialData = {}, onTipoEspacioChange }) => {
     const [formData, setFormData] = useState(() => {
         // Si recibimos datos iniciales, los usamos; de lo contrario, intentamos cargar de localStorage
         if (Object.keys(initialData).length > 0) {
@@ -21,6 +22,9 @@ const HeaderForm = ({ onDataChange, initialData = {} }) => {
         }
         return {};
     });
+
+    // Estado para el contratista seleccionado
+    const [contratistaSeleccionado, setContratistaSeleccionado] = useState('');
 
     // Efecto para establecer fecha y hora si es un formulario nuevo
     useEffect(() => {
@@ -41,6 +45,13 @@ const HeaderForm = ({ onDataChange, initialData = {} }) => {
             }));
         }
     }, [initialData, formData]);
+
+    // Efecto para notificar cuando cambia el tipo de espacio
+    useEffect(() => {
+        if (onTipoEspacioChange && formData.tipoEspacio) {
+            onTipoEspacioChange(formData.tipoEspacio);
+        }
+    }, [formData.tipoEspacio, onTipoEspacioChange]);
 
     // Efecto para guardar en localStorage cuando el componente se desmonte
     useEffect(() => {
@@ -64,6 +75,29 @@ const HeaderForm = ({ onDataChange, initialData = {} }) => {
         setFormData(updatedFormData);
     };
 
+    // Manejador para el cambio de contratista seleccionado
+    const handleContratistaChange = (e) => {
+        const selectedId = parseInt(e.target.value);
+        setContratistaSeleccionado(selectedId);
+        
+        if (selectedId) {
+            // Buscar el contratista seleccionado
+            const contratistaSeleccionado = contratistas.find(c => c.id === selectedId);
+            
+            if (contratistaSeleccionado) {
+                // Actualizar los campos relacionados automáticamente
+                setFormData(prevData => ({
+                    ...prevData,
+                    entidadContratista: contratistaSeleccionado.nombre,
+                    nit: contratistaSeleccionado.nit,
+                    nombreRepresentante: contratistaSeleccionado.representante,
+                    numeroContrato: contratistaSeleccionado.contrato,
+                    nombreSupervisor: contratistaSeleccionado.supervisor
+                }));
+            }
+        }
+    };
+
     const clearForm = () => {
         const now = new Date();
         const currentDate = now.toISOString().split('T')[0];
@@ -79,6 +113,7 @@ const HeaderForm = ({ onDataChange, initialData = {} }) => {
         };
 
         setFormData(clearedData);
+        setContratistaSeleccionado(''); // Resetear el contratista seleccionado
         localStorage.setItem('headerData', JSON.stringify(clearedData));
     };
 
@@ -125,6 +160,22 @@ const HeaderForm = ({ onDataChange, initialData = {} }) => {
                             />
                         </div>
 
+                        {/* Tipo de Espacio - NUEVO */}
+                        <div className="form-group">
+                            <label className="form-label" htmlFor="tipoEspacio">Tipo de Espacio:</label>
+                            <select
+                                className="form-control"
+                                id="tipoEspacio"
+                                name="tipoEspacio"
+                                value={formData.tipoEspacio || ''}
+                                onChange={handleChange}
+                            >
+                                <option value="">Seleccione el tipo...</option>
+                                <option value="cdvfijo">Centro de Vida Fijo</option>
+                                <option value="cdvparque">Centro de Vida Parque/Espacio Comunitario</option>
+                            </select>
+                        </div>
+
                         {/* Espacio de Atención */}
                         <div className="form-group">
                             <label className="form-label" htmlFor="espacioAtencion">Espacio de Atención:</label>
@@ -162,6 +213,27 @@ const HeaderForm = ({ onDataChange, initialData = {} }) => {
                                 value={formData.pmAsistentes || ''}
                                 onChange={handleChange}
                             />
+                        </div>
+
+                        {/* Selector de contratistas - NUEVO */}
+                        <div className="form-group">
+                            <label className="form-label" htmlFor="selectContratista">Seleccionar Contratista:</label>
+                            <select
+                                className="form-control"
+                                id="selectContratista"
+                                value={contratistaSeleccionado}
+                                onChange={handleContratistaChange}
+                            >
+                                <option value="">Seleccione un contratista...</option>
+                                {contratistas.map(contratista => (
+                                    <option key={contratista.id} value={contratista.id}>
+                                        {contratista.nombre}
+                                    </option>
+                                ))}
+                            </select>
+                            <small className="form-text text-muted">
+                                Seleccione para autocompletar los datos del contratista
+                            </small>
                         </div>
 
                         {/* Contratista (antes era entidadContratista) */}
