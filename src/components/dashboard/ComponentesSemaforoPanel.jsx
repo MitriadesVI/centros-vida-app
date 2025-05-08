@@ -1,220 +1,168 @@
 import React from 'react';
-import { 
-  Paper, 
-  Typography, 
-  Box, 
-  Grid, 
-  LinearProgress, 
-  Divider, 
-  Button 
-} from '@mui/material';
+import { Paper, Typography, Box, Chip, Divider, Grid, Button } from '@mui/material';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import WarningIcon from '@mui/icons-material/Warning';
 import ErrorIcon from '@mui/icons-material/Error';
-import TrendingUpIcon from '@mui/icons-material/TrendingUp';
-import TrendingDownIcon from '@mui/icons-material/TrendingDown';
 
 const ComponentesSemaforoPanel = ({ datos, onSelectComponente }) => {
-  if (!datos || !datos.porComponenteDetallado) {
+  if (!datos || !datos.porComponente || !datos.porComponente.promedios) {
     return (
-      <Paper sx={{ p: 3, height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <Typography variant="body1" color="textSecondary">
-          No hay datos disponibles para mostrar
+      <Paper sx={{ p: 3, mb: 3, textAlign: 'center' }}>
+        <Typography variant="subtitle1" color="textSecondary">
+          No hay datos disponibles para mostrar el semáforo de componentes.
         </Typography>
       </Paper>
     );
   }
+
+  // Extraer datos de componentes
+  const { promedios, nombres, detallado } = datos.porComponente;
   
-  // Función para obtener color basado en porcentaje
-  const getStatusColor = (percentage) => {
-    if (percentage >= 80) return '#4caf50'; // Verde
-    if (percentage >= 60) return '#ff9800'; // Amarillo
-    return '#f44336'; // Rojo
-  };
-  
-  // Función para obtener ícono basado en porcentaje
-  const getStatusIcon = (percentage) => {
-    if (percentage >= 80) return <CheckCircleIcon sx={{ color: '#4caf50' }} />;
-    if (percentage >= 60) return <WarningIcon sx={{ color: '#ff9800' }} />;
-    return <ErrorIcon sx={{ color: '#f44336' }} />;
-  };
-  
-  // Obtener el puntaje total general
-  const puntajeTotalGeneral = 
-    (datos.porComponenteDetallado.tecnico?.puntosTotales || 0) +
-    (datos.porComponenteDetallado.nutricion?.puntosTotales || 0) +
-    (datos.porComponenteDetallado.infraestructura?.puntosTotales || 0);
-    
-  const puntajeMaximoGeneral = 
-    (datos.porComponenteDetallado.tecnico?.puntosMaximos || 0) +
-    (datos.porComponenteDetallado.nutricion?.puntosMaximos || 0) +
-    (datos.porComponenteDetallado.infraestructura?.puntosMaximos || 0);
-  
-  // Información de los componentes
-  const componentes = [
-    {
-      id: 'tecnico',
-      nombre: 'Componente Técnico',
-      porcentaje: datos.porComponenteDetallado.tecnico?.porcentaje || 0,
-      puntosTotales: datos.porComponenteDetallado.tecnico?.puntosTotales || 0,
-      puntosMaximos: datos.porComponenteDetallado.tecnico?.puntosMaximos || 0,
-      tendencia: 'up' // Simulación: esto debería venir de datos históricos reales
-    },
-    {
-      id: 'nutricion',
-      nombre: 'Componente Nutrición',
-      porcentaje: datos.porComponenteDetallado.nutricion?.porcentaje || 0,
-      puntosTotales: datos.porComponenteDetallado.nutricion?.puntosTotales || 0,
-      puntosMaximos: datos.porComponenteDetallado.nutricion?.puntosMaximos || 0,
-      tendencia: 'stable' // Simulación: esto debería venir de datos históricos reales
-    },
-    {
-      id: 'infraestructura',
-      nombre: 'Componente Infraestructura',
-      porcentaje: datos.porComponenteDetallado.infraestructura?.porcentaje || 0,
-      puntosTotales: datos.porComponenteDetallado.infraestructura?.puntosTotales || 0,
-      puntosMaximos: datos.porComponenteDetallado.infraestructura?.puntosMaximos || 0,
-      tendencia: 'down' // Simulación: esto debería venir de datos históricos reales
+  // Determinar el color y el ícono según el promedio
+  const getColorAndIcon = (promedio) => {
+    if (promedio >= 80) {
+      return { color: 'success.main', bgColor: '#e8f5e9', icon: <CheckCircleIcon /> };
+    } else if (promedio >= 60) {
+      return { color: 'warning.main', bgColor: '#fff8e1', icon: <WarningIcon /> };
+    } else {
+      return { color: 'error.main', bgColor: '#ffebee', icon: <ErrorIcon /> };
     }
-  ];
-  
-  return (
-    <Paper sx={{ p: 3, height: '100%' }}>
-      <Typography variant="h6" align="center" gutterBottom>
-        Análisis de Componentes
-      </Typography>
+  };
+
+  // Función para contar formularios por tipo de espacio y componente
+  const contarFormulariosPorTipoEspacio = (componente, tipoEspacio) => {
+    // Si no tenemos los formularios originales, usamos una estimación
+    if (!datos.formularios) {
+      return 0;
+    }
+    
+    // Filtrar formularios por componente y tipo de espacio
+    return datos.formularios.filter(form => {
+      // Verificar si el formulario tiene datos para este componente
+      const tieneComponente = 
+        (componente === 'tecnico' && form.puntajePorComponente && form.puntajePorComponente['COMPONENTE TÉCNICO']) ||
+        (componente === 'nutricion' && form.puntajePorComponente && form.puntajePorComponente['COMPONENTE NUTRICIÓN Y ALIMENTACIÓN']) ||
+        (componente === 'infraestructura' && form.puntajePorComponente && form.puntajePorComponente['COMPONENTE DE INFRAESTRUCTURA Y DOTACIÓN']);
       
-      {/* Resumen general */}
-      <Box 
-        sx={{ 
-          mb: 3, 
-          mt: 2,
-          p: 2, 
-          bgcolor: '#f8f9fa',
-          borderRadius: 2,
-          border: '1px solid #e0e0e0',
-          textAlign: 'center'
-        }}
-      >
-        <Typography variant="subtitle1" color="text.secondary" gutterBottom>
-          Cumplimiento General
+      // Verificar el tipo de espacio
+      const coincideTipoEspacio = form.tipoEspacio === tipoEspacio;
+      
+      return tieneComponente && coincideTipoEspacio;
+    }).length;
+  };
+
+  return (
+    <Paper sx={{ p: 3, mb: 3 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+        <Typography variant="h6">
+          Semáforo de Componentes
         </Typography>
-        <Typography 
-          variant="h4" 
-          fontWeight="bold" 
-          sx={{ color: getStatusColor(datos.promedioCumplimiento) }}
-        >
-          {datos.promedioCumplimiento}%
-        </Typography>
-        <Typography variant="body2" color="text.secondary">
-          {puntajeTotalGeneral}/{puntajeMaximoGeneral} puntos totales
-        </Typography>
+        
+        <Box>
+          <Chip
+            label="Verde ≥ 80%"
+            size="small"
+            sx={{ backgroundColor: '#e8f5e9', color: 'success.main', mr: 1 }}
+          />
+          <Chip
+            label="Amarillo ≥ 60%"
+            size="small"
+            sx={{ backgroundColor: '#fff8e1', color: 'warning.main', mr: 1 }}
+          />
+          <Chip
+            label="Rojo < 60%"
+            size="small"
+            sx={{ backgroundColor: '#ffebee', color: 'error.main' }}
+          />
+        </Box>
       </Box>
       
       <Divider sx={{ my: 2 }} />
       
-      {/* Semáforo de componentes */}
-      <Grid container spacing={2}>
-        {componentes.map((componente) => (
-          <Grid item xs={12} key={componente.id}>
-            <Box 
-              sx={{ 
-                p: 2, 
-                borderRadius: '4px',
-                boxShadow: '0 1px 3px rgba(0,0,0,0.12)',
-                backgroundColor: '#fff',
-                transition: 'all 0.3s',
-                '&:hover': {
-                  boxShadow: '0 3px 6px rgba(0,0,0,0.16)',
-                  transform: 'translateY(-2px)'
-                },
-                cursor: 'pointer',
-                borderLeft: `10px solid ${getStatusColor(componente.porcentaje)}`
-              }}
-              onClick={() => onSelectComponente(componente.id)}
-            >
-              <Grid container alignItems="center" spacing={2}>
-                <Grid item>
-                  {getStatusIcon(componente.porcentaje)}
-                </Grid>
-                <Grid item xs>
-                  <Typography variant="subtitle1" fontWeight="medium">
-                    {componente.nombre}
+      <Grid container spacing={3}>
+        {promedios.map((promedio, index) => {
+          const componente = index === 0 ? 'tecnico' : index === 1 ? 'nutricion' : 'infraestructura';
+          const componenteData = detallado[componente];
+          const { color, bgColor, icon } = getColorAndIcon(promedio);
+          
+          // Contar formularios por tipo de espacio
+          const fijosFormularios = contarFormulariosPorTipoEspacio(componente, 'cdvfijo');
+          const parquesFormularios = contarFormulariosPorTipoEspacio(componente, 'cdvparque');
+          
+          return (
+            <Grid item xs={12} md={4} key={index}>
+              <Paper
+                elevation={3}
+                sx={{
+                  p: 3,
+                  backgroundColor: bgColor,
+                  height: '100%',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'space-between'
+                }}
+              >
+                <Box>
+                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                    <Box sx={{ mr: 2, color }}>{icon}</Box>
+                    <Typography variant="h6" component="div" sx={{ fontWeight: 'bold' }}>
+                      {nombres[index]}
+                    </Typography>
+                  </Box>
+                  
+                  <Typography
+                    variant="h3"
+                    component="div"
+                    align="center"
+                    sx={{ color, fontWeight: 'bold', my: 2 }}
+                  >
+                    {promedio}%
                   </Typography>
                   
-                  <Box sx={{ display: 'flex', alignItems: 'center', mt: 1, mb: 1 }}>
-                    <LinearProgress 
-                      variant="determinate" 
-                      value={componente.porcentaje} 
-                      sx={{ 
-                        flexGrow: 1,
-                        height: 12,
-                        borderRadius: 6,
-                        backgroundColor: '#e0e0e0',
-                        '& .MuiLinearProgress-bar': {
-                          backgroundColor: getStatusColor(componente.porcentaje)
-                        }
-                      }}
-                    />
-                    <Typography 
-                      variant="h6" 
-                      sx={{ 
-                        ml: 2,
-                        fontWeight: 'bold',
-                        color: getStatusColor(componente.porcentaje)
-                      }}
-                    >
-                      {componente.porcentaje}%
+                  <Box sx={{ mb: 2 }}>
+                    <Typography variant="body2" sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span>Puntos obtenidos:</span>
+                      <strong>{componenteData.puntosTotales}/{componenteData.puntosMaximos}</strong>
+                    </Typography>
+                    
+                    <Typography variant="body2" sx={{ display: 'flex', justifyContent: 'space-between', mt: 1 }}>
+                      <span>Formularios evaluados:</span>
+                      <strong>{componenteData.numFormularios}</strong>
                     </Typography>
                   </Box>
                   
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Typography variant="body2" color="text.secondary">
-                      {componente.puntosTotales}/{componente.puntosMaximos} pts
+                  <Divider sx={{ my: 2 }} />
+                  
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                    <Typography variant="body2">
+                      <strong>Centros Fijos:</strong>
                     </Typography>
-                    
-                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                      {componente.tendencia === 'up' && (
-                        <TrendingUpIcon fontSize="small" sx={{ color: '#4caf50', mr: 0.5 }} />
-                      )}
-                      {componente.tendencia === 'down' && (
-                        <TrendingDownIcon fontSize="small" sx={{ color: '#f44336', mr: 0.5 }} />
-                      )}
-                      <Typography 
-                        variant="caption" 
-                        sx={{ 
-                          color: componente.tendencia === 'up' ? '#4caf50' : 
-                                componente.tendencia === 'down' ? '#f44336' : 
-                                'text.secondary'
-                        }}
-                      >
-                        {componente.tendencia === 'up' ? '+5% vs. anterior' : 
-                          componente.tendencia === 'down' ? '-3% vs. anterior' : 
-                          'Sin cambios'}
-                      </Typography>
-                    </Box>
+                    <Typography variant="body2">
+                      <strong>{fijosFormularios}</strong> evaluaciones
+                    </Typography>
                   </Box>
-                </Grid>
-                <Grid item>
-                  <Button 
-                    variant="outlined" 
-                    size="small"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onSelectComponente(componente.id);
-                    }}
-                    sx={{ 
-                      borderColor: getStatusColor(componente.porcentaje),
-                      color: getStatusColor(componente.porcentaje)
-                    }}
-                  >
-                    Ver Detalles
-                  </Button>
-                </Grid>
-              </Grid>
-            </Box>
-          </Grid>
-        ))}
+                  
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <Typography variant="body2">
+                      <strong>Espacios Comunitarios:</strong>
+                    </Typography>
+                    <Typography variant="body2">
+                      <strong>{parquesFormularios}</strong> evaluaciones
+                    </Typography>
+                  </Box>
+                </Box>
+                
+                <Button
+                  variant="outlined"
+                  sx={{ mt: 3, borderColor: color, color, '&:hover': { borderColor: color } }}
+                  onClick={() => onSelectComponente(componente)}
+                >
+                  Ver Detalles
+                </Button>
+              </Paper>
+            </Grid>
+          );
+        })}
       </Grid>
     </Paper>
   );

@@ -8,8 +8,10 @@ import CumplimientoChart from './CumplimientoChart';
 import ContratistasChart from './ContratistasChart';
 import EspaciosChart from './EspaciosChart';
 import ComponenteDetailView from './ComponenteDetailView';
-// Importar el nuevo componente de semáforo en lugar del radar
-import ComponentesSemaforoPanel from './ComponentesSemaforoPanel'; 
+import ItemsAlertaComponent from './ItemsAlertaComponent';
+import TendenciasTemporalesChart from './TendenciasTemporalesChart';
+import EscalafonSupervisionComponent from './EscalafonSupervisionComponent';
+import AlertasComponent from './AlertasComponent';
 import { getFormulariosDashboard, calcularMetricasDashboard } from '../../services/dashboardService';
 
 const Dashboard = ({ user }) => {
@@ -137,6 +139,55 @@ const Dashboard = ({ user }) => {
     return { total, maximo };
   };
 
+  // Función para calcular el cumplimiento promedio por tipo de espacio
+  const calcularCumplimientoPorTipo = (tipo) => {
+    if (!formularios || formularios.length === 0) return 0;
+    
+    const formulariosFiltrados = formularios.filter(form => form.tipoEspacio === tipo);
+    if (formulariosFiltrados.length === 0) return 0;
+    
+    const sumaCumplimiento = formulariosFiltrados.reduce((sum, form) => 
+      sum + (Number(form.porcentajeCumplimiento) || 0), 0);
+    
+    return Math.round(sumaCumplimiento / formulariosFiltrados.length);
+  };
+
+  // Función para contar visitas por tipo de espacio
+  const contarVisitasPorTipo = (tipo) => {
+    if (!formularios || formularios.length === 0) return 0;
+    return formularios.filter(form => form.tipoEspacio === tipo).length;
+  };
+
+  // Función para calcular puntos obtenidos y posibles por tipo de espacio
+  const calcularPuntosPorTipo = (tipo) => {
+    if (!formularios || formularios.length === 0 || !metricas || !metricas.porComponenteDetallado) 
+      return { obtenidos: 0, posibles: 0 };
+    
+    const formulariosFiltrados = formularios.filter(form => form.tipoEspacio === tipo);
+    if (formulariosFiltrados.length === 0) return { obtenidos: 0, posibles: 0 };
+    
+    // Acumular puntos para esta modalidad específica
+    let puntosObtenidos = 0;
+    let puntosPosibles = 0;
+    
+    formulariosFiltrados.forEach(form => {
+      // Sumar puntos de todos los componentes
+      if (form.puntajePorComponente) {
+        Object.values(form.puntajePorComponente).forEach(comp => {
+          if (comp.total !== undefined && comp.maxPuntos !== undefined) {
+            puntosObtenidos += Number(comp.total) || 0;
+            puntosPosibles += Number(comp.maxPuntos) || 0;
+          }
+        });
+      }
+    });
+    
+    return { 
+      obtenidos: Math.round(puntosObtenidos), 
+      posibles: Math.round(puntosPosibles)
+    };
+  };
+
   return (
     <Container maxWidth="lg">
       <Box sx={{ py: 4 }}>
@@ -213,34 +264,93 @@ const Dashboard = ({ user }) => {
               </Paper>
             ) : (
               <>
-                {/* Tarjetas de resumen */}
+                {/* Tarjetas de resumen mejoradas */}
                 <Grid container spacing={3} sx={{ mb: 4 }}>
-                  <Grid item xs={12} sm={6} md={3}>
+                  {/* Primera fila: Resumen general */}
+                  <Grid item xs={12} sm={6} md={4}>
                     <Paper sx={{ p: 3, textAlign: 'center', bgcolor: '#e3f2fd' }}>
                       <Typography variant="h6" color="textSecondary">Total Visitas</Typography>
                       <Typography variant="h3" sx={{ mt: 2, fontWeight: 'bold' }}>
                         {metricas?.totalVisitas || 0}
                       </Typography>
+                      <Box sx={{ mt: 1, display: 'flex', justifyContent: 'space-around' }}>
+                        <Typography variant="body2" color="textSecondary">
+                          Centros Fijos: <strong>{contarVisitasPorTipo('cdvfijo')}</strong>
+                        </Typography>
+                        <Typography variant="body2" color="textSecondary">
+                          Parques/EC: <strong>{contarVisitasPorTipo('cdvparque')}</strong>
+                        </Typography>
+                      </Box>
                     </Paper>
                   </Grid>
                   
-                  <Grid item xs={12} sm={6} md={3}>
-                    <Paper sx={{ p: 3, textAlign: 'center', bgcolor: '#e8f5e9' }}>
-                      <Typography variant="h6" color="textSecondary">Promedio Cumplimiento</Typography>
-                      <Typography variant="h3" sx={{ mt: 2, fontWeight: 'bold', 
-                        color: (metricas?.promedioCumplimiento || 0) >= 80 ? '#2e7d32' : 
-                               (metricas?.promedioCumplimiento || 0) >= 60 ? '#f57c00' : 
-                               '#d32f2f'
-                      }}>
-                        {metricas?.promedioCumplimiento || 0}%
+                  <Grid item xs={12} sm={6} md={8}>
+                    <Paper sx={{ p: 3, bgcolor: '#e8f5e9' }}>
+                      <Typography variant="h6" color="textSecondary" align="center" gutterBottom>
+                        Cumplimiento
                       </Typography>
-                      <Typography variant="caption" color="textSecondary">
-                        {calcularPuntosTotales().total}/{calcularPuntosTotales().maximo} pts totales
-                      </Typography>
+                      <Grid container spacing={2}>
+                        {/* Cumplimiento Global */}
+                        <Grid item xs={12} md={4}>
+                          <Box sx={{ textAlign: 'center', border: '1px solid #e0e0e0', p: 2, borderRadius: 1 }}>
+                            <Typography variant="subtitle2" color="textSecondary">Global</Typography>
+                            <Typography variant="h4" sx={{ 
+                              fontWeight: 'bold', 
+                              color: (metricas?.promedioCumplimiento || 0) >= 80 ? '#2e7d32' : 
+                                    (metricas?.promedioCumplimiento || 0) >= 60 ? '#f57c00' : 
+                                    '#d32f2f'
+                            }}>
+                              {metricas?.promedioCumplimiento || 0}%
+                            </Typography>
+                            <Typography variant="caption" color="textSecondary">
+                              {calcularPuntosTotales().total}/{calcularPuntosTotales().maximo} pts
+                            </Typography>
+                          </Box>
+                        </Grid>
+                        
+                        {/* Cumplimiento Centros Fijos */}
+                        <Grid item xs={12} md={4}>
+                          <Box sx={{ textAlign: 'center', border: '1px solid #e0e0e0', p: 2, borderRadius: 1, bgcolor: '#e8eaf6' }}>
+                            <Typography variant="subtitle2" color="textSecondary">Centros Fijos</Typography>
+                            <Typography variant="h4" sx={{ 
+                              fontWeight: 'bold', 
+                              color: calcularCumplimientoPorTipo('cdvfijo') >= 80 ? '#2e7d32' : 
+                                    calcularCumplimientoPorTipo('cdvfijo') >= 60 ? '#f57c00' : 
+                                    '#d32f2f'
+                            }}>
+                              {calcularCumplimientoPorTipo('cdvfijo')}%
+                            </Typography>
+                            <Typography variant="caption" color="textSecondary">
+                              {calcularPuntosPorTipo('cdvfijo').obtenidos}/{calcularPuntosPorTipo('cdvfijo').posibles} pts
+                            </Typography>
+                          </Box>
+                        </Grid>
+                        
+                        {/* Cumplimiento Parques/Espacios Comunitarios */}
+                        <Grid item xs={12} md={4}>
+                          <Box sx={{ textAlign: 'center', border: '1px solid #e0e0e0', p: 2, borderRadius: 1, bgcolor: '#fce4ec' }}>
+                            <Typography variant="subtitle2" color="textSecondary">Parques/Espacios Comunitarios</Typography>
+                            <Typography variant="h4" sx={{ 
+                              fontWeight: 'bold', 
+                              color: calcularCumplimientoPorTipo('cdvparque') >= 80 ? '#2e7d32' : 
+                                    calcularCumplimientoPorTipo('cdvparque') >= 60 ? '#f57c00' : 
+                                    '#d32f2f'
+                            }}>
+                              {calcularCumplimientoPorTipo('cdvparque')}%
+                            </Typography>
+                            <Typography variant="caption" color="textSecondary">
+                              {calcularPuntosPorTipo('cdvparque').obtenidos}/{calcularPuntosPorTipo('cdvparque').posibles} pts
+                            </Typography>
+                          </Box>
+                        </Grid>
+                      </Grid>
                     </Paper>
                   </Grid>
-                  
-                  <Grid item xs={12} sm={6} md={3}>
+                </Grid>
+
+                {/* Métrica de PM Asistentes */}
+                <Grid container spacing={3} sx={{ mb: 4 }}>
+                  <Grid item xs={12} sm={6} md={4}>
                     <Paper sx={{ p: 3, textAlign: 'center', bgcolor: '#f0f4c3' }}>
                       <Typography variant="h6" color="textSecondary">
                         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -256,12 +366,24 @@ const Dashboard = ({ user }) => {
                       </Typography>
                     </Paper>
                   </Grid>
-                  
-                  <Grid item xs={12} sm={6} md={3}>
-                    <Paper sx={{ p: 3, textAlign: 'center', bgcolor: '#e8eaf6' }}>
-                      <Typography variant="h6" color="textSecondary">PM - Centros Fijos</Typography>
-                      <Typography variant="h3" sx={{ mt: 2, fontWeight: 'bold' }}>
+
+                  {/* PM por tipo de espacio */}
+                  <Grid item xs={12} sm={6} md={4}>
+                    <Paper sx={{ p: 2, textAlign: 'center', bgcolor: '#e8eaf6' }}>
+                      <Typography variant="subtitle2" color="textSecondary">PM - Centros Fijos</Typography>
+                      <Typography variant="h4" sx={{ mt: 1, fontWeight: 'bold' }}>
                         {metricas?.pmPorTipoEspacio?.fijo || 0}
+                      </Typography>
+                      <Typography variant="caption" color="textSecondary">
+                        promedio por visita
+                      </Typography>
+                    </Paper>
+                  </Grid>
+                  <Grid item xs={12} sm={6} md={4}>
+                    <Paper sx={{ p: 2, textAlign: 'center', bgcolor: '#fce4ec' }}>
+                      <Typography variant="subtitle2" color="textSecondary">PM - Parques/Espacios Comunitarios</Typography>
+                      <Typography variant="h4" sx={{ mt: 1, fontWeight: 'bold' }}>
+                        {metricas?.pmPorTipoEspacio?.parque || 0}
                       </Typography>
                       <Typography variant="caption" color="textSecondary">
                         promedio por visita
@@ -270,13 +392,17 @@ const Dashboard = ({ user }) => {
                   </Grid>
                 </Grid>
 
-                {/* Segunda fila con semáforo de componentes */}
+                {/* Sección de Alertas del Sistema */}
                 <Grid container spacing={4} sx={{ mb: 4 }}>
                   <Grid item xs={12}>
-                    <ComponentesSemaforoPanel 
-                      datos={metricas} 
-                      onSelectComponente={handleComponenteSelect}
-                    />
+                    <AlertasComponent datos={{...metricas, formularios: formularios}} />
+                  </Grid>
+                </Grid>
+
+                {/* Sección mejorada de Alertas */}
+                <Grid container spacing={4} sx={{ mb: 4 }}>
+                  <Grid item xs={12}>
+                    <ItemsAlertaComponent datos={{...metricas, formularios: formularios}} />
                   </Grid>
                 </Grid>
                 
@@ -291,10 +417,24 @@ const Dashboard = ({ user }) => {
                   </Grid>
                   
                   <Grid item xs={12}>
+                    <TendenciasTemporalesChart datos={metricas} />
+                  </Grid>
+                  
+                  <Grid item xs={12}>
                     <EspaciosChart 
                       datos={metricas} 
                       onSelectComponente={handleComponenteSelect}
                     />
+                  </Grid>
+                </Grid>
+                
+                {/* Escalafón de Supervisión - MOVIDO AL FINAL */}
+                <Grid container spacing={4} sx={{ my: 4 }}>
+                  <Grid item xs={12}>
+                    <Typography variant="h5" gutterBottom sx={{ mt: 2, mb: 3, fontWeight: "medium", color: "#424242" }}>
+                      Detalle de Ejecución por Supervisores
+                    </Typography>
+                    <EscalafonSupervisionComponent datos={{...metricas, formularios: formularios}} />
                   </Grid>
                 </Grid>
                 
