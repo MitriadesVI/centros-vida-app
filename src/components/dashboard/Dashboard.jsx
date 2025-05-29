@@ -13,6 +13,7 @@ import TendenciasTemporalesChart from './TendenciasTemporalesChart';
 import EscalafonSupervisionComponent from './EscalafonSupervisionComponent';
 import AlertasComponent from './AlertasComponent';
 import { getFormulariosDashboard, calcularMetricasDashboard } from '../../services/dashboardService';
+import EspaciosVisitadosChart from './EspaciosVisitadosChart';
 
 const Dashboard = ({ user }) => {
   const [formularios, setFormularios] = useState([]);
@@ -427,6 +428,17 @@ const Dashboard = ({ user }) => {
                     />
                   </Grid>
                 </Grid>
+
+                {/* --- SECCIÓN NUEVA AÑADIDA --- */}
+                <Grid container spacing={4} sx={{ my: 4 }}>
+                  <Grid item xs={12}>
+                    <Typography variant="h5" gutterBottom sx={{ mt: 2, mb: 3, fontWeight: "medium", color: "#424242" }}>
+                      Análisis de Espacios Visitados
+                    </Typography>
+                    <EspaciosVisitadosChart datos={{...metricas, formularios: formularios}} />
+                  </Grid>
+                </Grid>
+                {/* --- FIN SECCIÓN NUEVA AÑADIDA --- */}
                 
                 {/* Escalafón de Supervisión - MOVIDO AL FINAL */}
                 <Grid container spacing={4} sx={{ my: 4 }}>

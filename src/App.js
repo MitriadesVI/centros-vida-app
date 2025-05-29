@@ -4,12 +4,15 @@ import { Container, Box, Button, Snackbar, Alert, Typography, Tab, Tabs, Paper, 
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 
-// --- NUEVAS IMPORTACIONES ---
-import { onAuthChange, getCurrentUser, logout } from './services/authService'; // Asume que existe este servicio
-import { saveFormSummary } from './services/formDataService'; // Asume que existe este servicio (Firebase/Supabase)
-import Login from './components/Login'; // Asume que existe este componente
-import Dashboard from './components/dashboard/Dashboard'; // NUEVA IMPORTACIÓN
-// --- FIN NUEVAS IMPORTACIONES ---
+// --- IMPORTACIONES DE SERVICIOS Y COMPONENTES ---
+// Servicios de autenticación (manteniendo los que no cambian)
+import { onAuthChange, getCurrentUser, logout } from './services/authService'; 
+// Servicios de roles de usuario (actualizados/nuevos)
+import { getUserRole, ROLES, updateLastLogin } from './services/userRoleService'; // << NUEVA IMPORTACIÓN / ACTUALIZADA
+import { saveFormSummary } from './services/formDataService'; 
+import Login from './components/Login'; 
+import Dashboard from './components/dashboard/Dashboard'; 
+import AdminPanel from './components/admin/AdminPanel'; // << NUEVA IMPORTACIÓN
 
 // Importación de los logos en base64
 import { HEADER_LOGO, FOOTER_BANNER } from './assets/logoImages.js';
@@ -33,15 +36,15 @@ import {
 } from './services/localStorageService';
 
 function App() {
-    // Estado para controlar el modo de visualización (formulario o lista de guardados)
-    const [viewMode, setViewMode] = useState('form'); // 'form', 'saved' o 'dashboard'
+    // Estado para controlar el modo de visualización
+    const [viewMode, setViewMode] = useState('form'); // 'form', 'saved', 'dashboard' o 'admin'
 
-    // --- NUEVOS ESTADOS ---
-    const [user, setUser] = useState(null); // Estado para el usuario autenticado
-    const [authChecked, setAuthChecked] = useState(false); // Estado para saber si ya se verificó la auth inicial
-    // --- FIN NUEVOS ESTADOS ---
+    // Estados de autenticación y usuario
+    const [user, setUser] = useState(null); 
+    const [authChecked, setAuthChecked] = useState(false); 
+    const [userRole, setUserRole] = useState(null); 
 
-    // Estados para los diferentes componentes
+    // Estados para los diferentes componentes del formulario
     const [headerData, setHeaderData] = useState({});
     const [signatures, setSignatures] = useState({
         'apoyo a la supervisión quien realiza la visita': { data: '', checked: false },
@@ -51,12 +54,8 @@ function App() {
     const [checklistSectionsData, setChecklistSectionsData] = useState({});
     const [photos, setPhotos] = useState([]);
     const [geoLocation, setGeoLocation] = useState({});
-
-    // Nuevo estado para el tipo de espacio y checklist dinámico
     const [tipoEspacio, setTipoEspacio] = useState('');
     const [checklistItems, setChecklistItems] = useState(getChecklistData());
-
-    // Estado para la puntuación total
     const [puntuacionTotal, setPuntuacionTotal] = useState({
         total: 0,
         promedio: 0,
@@ -64,30 +63,55 @@ function App() {
         maxPuntosPosibles: 0,
         porcentajeCumplimiento: 0
     });
-
-    // Estado para el formulario actual
     const [currentFormId, setCurrentFormId] = useState(null);
     const [formChanged, setFormChanged] = useState(false);
-
-    // Estado para notificaciones
     const [notification, setNotification] = useState({
         open: false,
         message: '',
         severity: 'success'
     });
 
-    // --- NUEVO useEffect PARA AUTENTICACIÓN ---
+    // useEffect para autenticación y autorización (usa getUserRole y updateLastLogin de userRoleService)
     useEffect(() => {
-        // Suscribirse a los cambios de autenticación
-        const unsubscribe = onAuthChange((user) => {
-            setUser(user); // Actualiza el usuario (puede ser null si no está logueado)
-            setAuthChecked(true); // Marca que la verificación inicial ya se hizo
-        });
-
-        // Limpiar la suscripción al desmontar el componente
-        return () => unsubscribe();
-    }, []); // El array vacío asegura que se ejecute solo una vez al montar
-    // --- FIN useEffect AUTENTICACIÓN ---
+      const unsubscribe = onAuthChange(async (user) => {
+        if (user) {
+          try {
+            const role = await getUserRole(user.uid); // Usa getUserRole de userRoleService
+            
+            if (!role) {
+              console.log("Usuario no autorizado, cerrando sesión...");
+              await logout();
+              setUser(null);
+              setUserRole(null);
+              setNotification({
+                open: true,
+                message: 'Acceso denegado. Contacte al administrador.',
+                severity: 'error'
+              });
+            } else {
+              setUser(user);
+              setUserRole(role);
+              await updateLastLogin(user.uid); // Usa updateLastLogin de userRoleService
+            }
+          } catch (error) {
+            console.error("Error al verificar autorización:", error);
+            await logout();
+            setUser(null);
+            setUserRole(null);
+            setNotification({ 
+                open: true,
+                message: 'Error al verificar autorización. Sesión cerrada.',
+                severity: 'error'
+            });
+          }
+        } else {
+          setUser(null);
+          setUserRole(null);
+        }
+        setAuthChecked(true);
+      });
+      return () => unsubscribe();
+    }, []);
 
     // Limpiar formularios antiguos al inicio
     useEffect(() => {
@@ -96,38 +120,24 @@ function App() {
 
     // Efecto para autoguardado (solo local)
     useEffect(() => {
-        // Solo autoguardar si hay cambios y el usuario está logueado
         if (formChanged && user) {
             const autoSaveTimer = setTimeout(() => {
                 const formData = {
-                    headerData,
-                    signatures,
-                    generalObservations,
-                    checklistSectionsData,
-                    photos,
-                    geoLocation,
-                    tipoEspacio,
-                    puntuacionTotal,
+                    headerData, signatures, generalObservations, checklistSectionsData,
+                    photos, geoLocation, tipoEspacio, puntuacionTotal,
                     lastUpdated: new Date().toISOString()
                 };
-
-                // Guardar SOLO en localStorage sin sincronizar
                 const savedId = saveFormToLocalStorage(formData, currentFormId);
-                if (savedId && currentFormId !== savedId) {
-                    setCurrentFormId(savedId);
-                }
-
+                if (savedId && currentFormId !== savedId) setCurrentFormId(savedId);
                 setFormChanged(false);
                 console.log('Autoguardado en localStorage completado');
-            }, 5000); // Autoguardar después de 5 segundos de inactividad
-
+            }, 5000);
             return () => clearTimeout(autoSaveTimer);
         }
     }, [headerData, signatures, generalObservations, checklistSectionsData, photos, geoLocation, tipoEspacio, puntuacionTotal, formChanged, user, currentFormId]);
 
     // Efecto para registrar cambios en los datos
     useEffect(() => {
-        // Evitar marcar como cambiado al inicio si solo se setea fecha/hora
         if (currentFormId || (Object.keys(headerData).length > 2 || generalObservations || Object.keys(checklistSectionsData).length > 0 || photos.length > 0 || Object.keys(signatures).some(k => signatures[k].data) || Object.keys(geoLocation).length > 0)) {
             setFormChanged(true);
         }
@@ -137,99 +147,77 @@ function App() {
     useEffect(() => {
         const newChecklist = getChecklistData(tipoEspacio);
         setChecklistItems(newChecklist);
-        setChecklistSectionsData({}); // Reiniciar datos del checklist
+        setChecklistSectionsData({});
     }, [tipoEspacio]);
 
     // Efecto para calcular la puntuación total
     useEffect(() => {
-        let totalPuntos = 0;
-        let itemsRespondidos = 0;
-        let totalItemsCalculado = 0;
-
+        let totalPuntos = 0, itemsRespondidos = 0, totalItemsCalculado = 0;
         checklistItems.forEach(section => {
             const sectionData = checklistSectionsData[section.title];
-            const numItemsInSection = section.items.length;
-            totalItemsCalculado += numItemsInSection;
-
+            totalItemsCalculado += section.items.length;
             if (sectionData && sectionData.puntuacion) {
                 totalPuntos += sectionData.puntuacion.total || 0;
                 itemsRespondidos += sectionData.puntuacion.respondidos || 0;
             }
         });
-
         const promedio = itemsRespondidos > 0 ? Math.round(totalPuntos / itemsRespondidos) : 0;
         const maxPuntosPosibles = getMaxPuntosPosibles(tipoEspacio);
         const porcentajeCumplimiento = maxPuntosPosibles > 0 ? Math.round((totalPuntos / maxPuntosPosibles) * 100) : 0;
         const completado = totalItemsCalculado > 0 ? Math.round((itemsRespondidos / totalItemsCalculado) * 100) : 0;
-
-        setPuntuacionTotal({
-            total: totalPuntos,
-            promedio: promedio,
-            completado: completado,
-            maxPuntosPosibles: maxPuntosPosibles,
-            porcentajeCumplimiento: porcentajeCumplimiento
-        });
+        setPuntuacionTotal({ total: totalPuntos, promedio, completado, maxPuntosPosibles, porcentajeCumplimiento });
     }, [checklistSectionsData, checklistItems, tipoEspacio]);
 
-    // --- NUEVA FUNCIÓN ---
-    // Función para manejar login exitoso
-    const handleLoginSuccess = (loggedInUser) => {
-        setUser(loggedInUser);
-        setViewMode('form'); // Opcional: redirigir al formulario después del login
-    };
-    // --- FIN NUEVA FUNCIÓN ---
-
-    // <<< VERSIÓN CORREGIDA: saveCurrentForm (SOLO GUARDADO LOCAL) >>>
-    const saveCurrentForm = () => {
-        // No guardar si no hay cambios o si el usuario no está logueado
-        if (!formChanged || !user) {
-            console.log("saveCurrentForm: No hay cambios o no hay usuario. Saliendo.");
-            return;
+    // Función para manejar login exitoso (usa getUserRole y updateLastLogin de userRoleService)
+    const handleLoginSuccess = async (loggedInUser) => {
+      try {
+        const role = await getUserRole(loggedInUser.uid); // Usa getUserRole de userRoleService
+        if (!role) {
+          await logout();
+          setUser(null); 
+          setUserRole(null); 
+          setNotification({
+            open: true,
+            message: 'Acceso denegado. Contacte al administrador.',
+            severity: 'error'
+          });
+        } else {
+          setUser(loggedInUser);
+          setUserRole(role);
+          await updateLastLogin(loggedInUser.uid); // Usa updateLastLogin de userRoleService
+          setViewMode('form');
         }
+      } catch (error) {
+        console.error("Error al verificar autorización en login:", error);
+        setUser(null);
+        setUserRole(null);
+        setNotification({
+          open: true,
+          message: 'Error al verificar permisos. Intente nuevamente.',
+          severity: 'error'
+        });
+      }
+    };
 
+    const saveCurrentForm = () => {
+        if (!formChanged || !user) return;
         const formData = {
-            headerData,
-            signatures,
-            generalObservations,
-            checklistSectionsData,
-            photos,
-            geoLocation,
-            tipoEspacio,
-            puntuacionTotal,
+            headerData, signatures, generalObservations, checklistSectionsData,
+            photos, geoLocation, tipoEspacio, puntuacionTotal,
             lastUpdated: new Date().toISOString()
         };
-
-        // Guardar SOLO en localStorage
         const savedId = saveFormToLocalStorage(formData, currentFormId);
-        if (savedId && currentFormId !== savedId) {
-            setCurrentFormId(savedId); // Actualizar ID si es nuevo
-        }
-
-        // Mostrar notificación de guardado local
-        setNotification({
-            open: true,
-            message: 'Cambios guardados localmente',
-            severity: 'success'
-        });
-
-        // Marcar como no cambiado después del guardado local
+        if (savedId && currentFormId !== savedId) setCurrentFormId(savedId);
+        setNotification({ open: true, message: 'Cambios guardados localmente', severity: 'success' });
         setFormChanged(false);
-        console.log("Guardado local completado (sin sincronización con Firebase)");
+        console.log("Guardado local completado");
     };
-    // <<< FIN VERSIÓN CORREGIDA: saveCurrentForm >>>
 
-    // Cargar un formulario guardado
     const loadSavedForm = (formId) => {
-        if (!formId) {
-            resetForm();
-            setViewMode('form');
-            return;
-        }
-
+        if (!formId) { resetForm(); setViewMode('form'); return; }
         const savedForm = getFormFromLocalStorage(formId);
         if (savedForm && savedForm.data) {
             const { data } = savedForm;
-
             setHeaderData(data.headerData || {});
             setSignatures(data.signatures || {
                 'apoyo a la supervisión quien realiza la visita': { data: '', checked: false },
@@ -241,32 +229,20 @@ function App() {
             setGeoLocation(data.geoLocation || {});
             setTipoEspacio(data.tipoEspacio || '');
             setPuntuacionTotal(data.puntuacionTotal || { total: 0, promedio: 0, completado: 0, maxPuntosPosibles: 0, porcentajeCumplimiento: 0 });
-
             setCurrentFormId(formId);
-            setFormChanged(false); // Al cargar, se asume que no hay cambios iniciales
+            setFormChanged(false);
             setViewMode('form');
-
-            setNotification({
-                open: true,
-                message: 'Formulario cargado correctamente',
-                severity: 'success'
-            });
+            setNotification({ open: true, message: 'Formulario cargado correctamente', severity: 'success' });
         } else {
-            setNotification({
-                open: true,
-                message: 'No se pudo cargar el formulario',
-                severity: 'error'
-            });
-            resetForm(); // Resetear si no se pudo cargar para evitar estado inconsistente
+            setNotification({ open: true, message: 'No se pudo cargar el formulario', severity: 'error' });
+            resetForm();
         }
     };
 
-    // Resetear el formulario
     const resetForm = () => {
         const now = new Date();
         const currentDate = now.toISOString().split('T')[0];
         const currentTime = now.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', hour12: false });
-
         setHeaderData({ fechaVisita: currentDate, horaVisita: currentTime });
         setSignatures({
             'apoyo a la supervisión quien realiza la visita': { data: '', checked: false },
@@ -278,16 +254,11 @@ function App() {
         setGeoLocation({});
         setTipoEspacio('');
         setPuntuacionTotal({ total: 0, promedio: 0, completado: 0, maxPuntosPosibles: 0, porcentajeCumplimiento: 0 });
-        setCurrentFormId(null); // Asegurarse de limpiar el ID
+        setCurrentFormId(null);
         setFormChanged(false);
     };
 
-    // Cerrar notificación
-    const handleCloseNotification = () => {
-        setNotification({ ...notification, open: false });
-    };
-
-    // Manejadores para actualizar los estados (sin cambios aquí)
+    const handleCloseNotification = () => setNotification({ ...notification, open: false });
     const handleHeaderDataChange = (data) => setHeaderData(prev => ({ ...prev, ...data }));
     const handleTipoEspacioChange = (tipo) => setTipoEspacio(tipo);
     const handleSignatureChange = (role, signatureData, checked) => {
@@ -304,8 +275,7 @@ function App() {
         }));
     };
 
-    // generateTableData (sin cambios aquí)
-    const generateTableData = () => {
+    const generateTableData = () => { /* ... (sin cambios) ... */ 
         const tableRows = [];
         checklistItems.forEach((section) => {
             tableRows.push([{ content: ' ', colSpan: 2, styles: { cellPadding: 3 } }]);
@@ -331,10 +301,7 @@ function App() {
         });
         return tableRows;
     };
-
-    // <<< ESTE ES EL ÚNICO LUGAR QUE DEBE SINCRONIZAR CON FIREBASE >>>
-    // generatePdf (Sin cambios funcionales, sigue sincronizando)
-    const generatePdf = async () => {
+    const generatePdf = async () => { /* ... (sin cambios funcionales aquí, solo usa `user`) ... */ 
         let syncError = null;
         if (!currentFormId) {
             console.error("No hay formulario activo para finalizar.");
@@ -342,7 +309,7 @@ function App() {
             return;
         }
         markFormAsComplete(currentFormId);
-        if (user) {
+        if (user) { // `user` ya está en el scope
             const summaryData = {
                 formId: currentFormId,
                 headerData: {
@@ -361,31 +328,26 @@ function App() {
                     total: puntuacionTotal.total, promedio: puntuacionTotal.promedio, completado: puntuacionTotal.completado,
                     maxPuntosPosibles: puntuacionTotal.maxPuntosPosibles, porcentajeCumplimiento: puntuacionTotal.porcentajeCumplimiento
                 },
-               
                 checklistSectionsData: checklistSectionsData,
                 isComplete: true,
-                userid: user.uid || user.id,
-                userEmail: user.email,
-                lastUpdated: new Date().toISOString() // Timestamp de finalización
+                userid: user.uid || user.id, // `user` aquí
+                userEmail: user.email, // `user` aquí
+                lastUpdated: new Date().toISOString() 
             };
-
             try {
-                await saveFormSummary(summaryData); // ESTA ES LA ÚNICA SINCRONIZACIÓN CON FIREBASE
+                await saveFormSummary(summaryData); 
                 console.log('Formulario completo sincronizado con backend ID:', currentFormId);
             } catch (error) {
                 console.error('Error al sincronizar formulario completo en backend:', error);
-                syncError = error; // Guardar el error para mostrar notificación después
+                syncError = error; 
             }
         }
-
-        // --- Inicio del código de generación PDF (sin cambios funcionales aquí) ---
         const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4', margins: { top: 40, bottom: 40, left: 20, right: 20 } });
         const standardTableHead = (title1, title2) => [[{ content: title1, styles: { halign: 'center', fillColor: [30, 136, 229], textColor: 255, fontSize: 12, fontStyle: 'bold' } }, { content: title2, styles: { halign: 'center', fillColor: [30, 136, 229], textColor: 255, fontSize: 12, fontStyle: 'bold' } }]];
         const pageWidth = doc.internal.pageSize.width;
         const pageHeight = doc.internal.pageSize.height;
         const margin = 20;
         let currentY = 45;
-
         doc.setTextColor(0, 0, 0);
         doc.setFontSize(16).setFont('helvetica', 'bold');
         let reportTitle = 'Reporte de Supervisión - Centros de Vida';
@@ -394,7 +356,6 @@ function App() {
         doc.text(reportTitle, pageWidth / 2, currentY, { align: 'center' });
         currentY += 10;
         doc.setFontSize(12).setFont('helvetica', 'normal');
-
         const resumenData = [
             ['Puntuación Total', `${puntuacionTotal.total}/${puntuacionTotal.maxPuntosPosibles} puntos (${puntuacionTotal.porcentajeCumplimiento}%)`],
             ['Promedio General', `${puntuacionTotal.promedio}/100`],
@@ -402,7 +363,6 @@ function App() {
         ];
         doc.autoTable({ head: standardTableHead('Resumen de Evaluación', 'Valores'), body: resumenData, startY: currentY, theme: 'grid', styles: { fontSize: 10, cellPadding: 6, overflow: 'linebreak' }, margin: { left: margin, right: margin }, headStyles: { fillColor: [33, 150, 243], textColor: [255, 255, 255], fontStyle: 'bold' } });
         currentY = doc.lastAutoTable.finalY + 10;
-
         const headerRows = [
             ['Fecha de Visita', headerData.fechaVisita || 'N/A'], ['Hora de Visita', headerData.horaVisita || 'N/A'],
             ['Tipo de Espacio', tipoEspacio === 'cdvfijo' ? 'Centro de Vida Fijo' : tipoEspacio === 'cdvparque' ? 'Centro de Vida Parque/Espacio Comunitario' : 'N/A'],
@@ -414,7 +374,6 @@ function App() {
         ];
         doc.autoTable({ head: standardTableHead('Datos de la Visita', 'Información'), body: headerRows, startY: currentY, theme: 'grid', styles: { fontSize: 10, cellPadding: 6, overflow: 'linebreak' }, margin: { left: margin, right: margin }, columnStyles: { 0: { cellWidth: 80 }, 1: { cellWidth: 'auto' } } });
         currentY = doc.lastAutoTable.finalY + 15;
-
         if (geoLocation && (geoLocation.latitude || geoLocation.longitude)) {
             if (currentY + 80 > pageHeight - 40) { doc.addPage(); currentY = 40; addHeaderAndFooter(doc); }
             const geoRows = [];
@@ -427,14 +386,10 @@ function App() {
                 currentY = doc.lastAutoTable.finalY + 15;
             }
         }
-
         doc.autoTable({ body: generateTableData(), startY: currentY, theme: 'grid', styles: { fontSize: 10, cellPadding: 6, overflow: 'linebreak' }, margin: { left: margin, right: margin }, tableWidth: pageWidth - (margin * 2), didDrawPage: (data) => { addHeaderAndFooter(doc); } });
         currentY = doc.lastAutoTable.finalY + 15;
-
         const requiredSpace = 30 + (Object.keys(signatures).length * 60) + (generalObservations ? 40 : 0) + (photos.length > 0 ? 40 : 0);
         if (currentY + requiredSpace > pageHeight - 40) { doc.addPage(); currentY = 40; addHeaderAndFooter(doc); }
-
-        // Firmas
         doc.setFontSize(14).setFont('helvetica', 'bold').text('Firmas:', margin, currentY); currentY += 15;
         const uniqueRoles = [...new Set(Object.keys(signatures).map(role => role.toLowerCase()))];
         for (let i = 0; i < uniqueRoles.length; i++) {
@@ -449,8 +404,6 @@ function App() {
             }
             currentY += 60;
         }
-
-        // Observaciones
         if (generalObservations) {
             if (currentY + 50 > pageHeight - 40) { doc.addPage(); currentY = 40; addHeaderAndFooter(doc); }
             doc.setFontSize(14).setFont('helvetica', 'bold').text('Observaciones Generales:', margin, currentY); currentY += 10;
@@ -459,8 +412,6 @@ function App() {
             doc.text(textLines, margin, currentY);
             currentY += (textLines.length * 7) + 15;
         }
-
-        // Fotos
         if (photos && photos.length > 0) {
             if (currentY + 40 > pageHeight - 40) { doc.addPage(); currentY = 40; addHeaderAndFooter(doc); }
             doc.setFontSize(14).setFont('helvetica', 'bold').text('Evidencia Fotográfica:', margin, currentY); currentY += 15;
@@ -468,7 +419,6 @@ function App() {
                 const photo = photos[i];
                 if (currentY + 110 > pageHeight - 40) { doc.addPage(); currentY = 40; addHeaderAndFooter(doc); }
                 try {
-                    // Reducir calidad JPEG para ahorrar espacio en PDF
                     doc.addImage(photo.preview, 'JPEG', margin, currentY, 80, 80, undefined, 'MEDIUM');
                     doc.setFontSize(11).setFont('helvetica', 'bold').text(`Foto ${i + 1}:`, margin + 90, currentY + 10);
                     doc.setFontSize(10).setFont('helvetica', 'normal');
@@ -484,28 +434,19 @@ function App() {
                 }
             }
         }
-
-        // Encabezado/Pie a todas las páginas
         const totalPages = doc.internal.getNumberOfPages();
         for (let i = 1; i <= totalPages; i++) { doc.setPage(i); addHeaderAndFooter(doc); }
-
         doc.save(`reporte_${headerData.espacioAtencion || 'supervision'}_${headerData.fechaVisita || 'fecha'}.pdf`);
-
-        // Mostrar notificación final
         if (syncError) {
             setNotification({ open: true, message: 'PDF generado. Error al sincronizar datos finalizados.', severity: 'warning' });
-        } else if (user) {
+        } else if (user) { // `user` aquí
             setNotification({ open: true, message: 'PDF generado y datos finalizados sincronizados.', severity: 'success' });
         } else {
             setNotification({ open: true, message: 'PDF generado. Datos guardados localmente.', severity: 'info' });
         }
-        // Marcar formulario como no cambiado DESPUÉS de generar PDF y sincronizar (si aplica)
         setFormChanged(false);
     };
-    // <<< FIN DE SINCRONIZACIÓN CON FIREBASE >>>
-
-    // addHeaderAndFooter (sin cambios aquí)
-    const addHeaderAndFooter = (doc) => {
+    const addHeaderAndFooter = (doc) => { /* ... (sin cambios) ... */ 
         const pageWidth = doc.internal.pageSize.width; const pageHeight = doc.internal.pageSize.height;
         try {
             doc.addImage(HEADER_LOGO, 'JPEG', 0, 0, pageWidth, 30);
@@ -520,14 +461,11 @@ function App() {
         }
     };
 
-    // --- NUEVA CONDICIÓN PARA PANTALLA DE LOGIN ---
     if (!authChecked) {
         return (
             <ThemeProvider theme={theme}>
-                <Container maxWidth="sm">
-                    <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
-                        <Typography>Verificando sesión...</Typography>
-                    </Box>
+                <Container maxWidth="sm" sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+                    <Typography>Verificando sesión...</Typography>
                 </Container>
             </ThemeProvider>
         );
@@ -538,47 +476,68 @@ function App() {
             <ThemeProvider theme={theme}>
                 <Container maxWidth="sm">
                     <Box sx={{ py: 4, mt: 8, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                        <Typography component="h1" variant="h4" gutterBottom align="center">
-                            Sistema de Visitas y Supervisión
-                        </Typography>
-                        <Typography component="h2" variant="h6" color="text.secondary" align="center" sx={{ mb: 4 }}>
-                            Iniciar Sesión
-                        </Typography>
+                        <Typography component="h1" variant="h4" gutterBottom align="center">Sistema de Visitas y Supervisión</Typography>
+                        <Typography component="h2" variant="h6" color="text.secondary" align="center" sx={{ mb: 4 }}>Iniciar Sesión</Typography>
                         <Login onLoginSuccess={handleLoginSuccess} />
                     </Box>
                 </Container>
+                <Snackbar open={notification.open} autoHideDuration={6000} onClose={handleCloseNotification} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
+                    <Alert onClose={handleCloseNotification} severity={notification.severity} sx={{ width: '100%' }} variant="filled">{notification.message}</Alert>
+                </Snackbar>
             </ThemeProvider>
         );
     }
-    // --- FIN CONDICIÓN LOGIN ---
 
-    // Si el usuario está autenticado, mostrar la app normal
     return (
         <ThemeProvider theme={theme}>
             <Container maxWidth="lg">
-                {/* --- MODIFICACIÓN SECCIÓN TABS --- */}
                 <Paper sx={{ position: 'sticky', top: 0, zIndex: 1000, bgcolor: 'background.paper' }}>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', px: 2, borderBottom: 1, borderColor: 'divider' }}>
+                        {/* --- MODIFICACIÓN SECCIÓN TABS CON CONTROL DE ACCESO --- */}
                         <Tabs
-                            value={viewMode}
-                            onChange={(e, newValue) => {
-                                // Solo guardar localmente (sin sincronizar) si hay cambios
-                                if (formChanged && viewMode === 'form' && user) {
-                                    saveCurrentForm(); // Ahora solo guarda localmente
-                                }
-                                setViewMode(newValue);
-                            }}
-                            sx={{ flexGrow: 1 }}
+                          value={viewMode}
+                          onChange={(e, newValue) => {
+                            // Verificar permisos basados en rol
+                            if (newValue === 'dashboard' && userRole === ROLES.APOYO) {
+                              setNotification({
+                                open: true,
+                                message: 'No tienes permiso para acceder al Dashboard',
+                                severity: 'warning'
+                              });
+                              return;
+                            }
+                            
+                            if (newValue === 'admin' && userRole !== ROLES.ADMIN) {
+                              setNotification({
+                                open: true,
+                                message: 'Solo los administradores pueden acceder a este panel',
+                                severity: 'warning'
+                              });
+                              return;
+                            }
+                            
+                            if (formChanged && viewMode === 'form' && user) {
+                              saveCurrentForm();
+                            }
+                            setViewMode(newValue);
+                          }}
+                          sx={{ flexGrow: 1 }}
                         >
-                            <Tab label="Formulario Actual" value="form" />
-                            <Tab label="Formularios Guardados" value="saved" />
+                          <Tab label="Formulario Actual" value="form" />
+                          <Tab label="Formularios Guardados" value="saved" />
+                          {(userRole === ROLES.ADMIN || userRole === ROLES.SUPERVISOR) && (
                             <Tab label="Dashboard" value="dashboard" />
+                          )}
+                          {userRole === ROLES.ADMIN && (
+                            <Tab label="Administración" value="admin" />
+                          )}
                         </Tabs>
+                        {/* --- FIN MODIFICACIÓN SECCIÓN TABS --- */}
 
                         {user && (
                             <Box sx={{ display: 'flex', alignItems: 'center', ml: 2 }}>
-                                <Typography variant="body2" sx={{ mr: 2, display: { xs: 'none', sm: 'block' } }}>
-                                    {user.email}
+                                <Typography variant="body2" sx={{ mr: 1, display: { xs: 'none', sm: 'block' } }}>
+                                    {user.email} {userRole && `(${userRole})`}
                                 </Typography>
                                 <Button
                                     variant="outlined"
@@ -587,8 +546,9 @@ function App() {
                                         try {
                                             await logout();
                                             setUser(null);
-                                            setViewMode('form');
-                                            resetForm(); // Resetear formulario al cerrar sesión
+                                            setUserRole(null);
+                                            setViewMode('form'); 
+                                            resetForm(); 
                                         } catch (error) {
                                             console.error("Error al cerrar sesión:", error);
                                             setNotification({ open: true, message: 'Error al cerrar sesión.', severity: 'error' });
@@ -601,20 +561,16 @@ function App() {
                         )}
                     </Box>
                 </Paper>
-                {/* --- FIN MODIFICACIÓN SECCIÓN TABS --- */}
 
-                {/* Mostrar el título con información del formulario actual */}
                 {viewMode === 'form' && (
                     <Box sx={{ mt: 2, mb: 2, textAlign: 'center' }}>
-                        <Typography variant="h5">
-                            {currentFormId ? 'Editando Formulario' : 'Nuevo Formulario'}
-                        </Typography>
+                        <Typography variant="h5">{currentFormId ? 'Editando Formulario' : 'Nuevo Formulario'}</Typography>
                         <Typography variant="body2" color="textSecondary">
                             {currentFormId
                                 ? `ID: ${currentFormId.substring(0, 8)}... ${formChanged ? '(Cambios sin guardar localmente)' : '(Guardado localmente)'}`
                                 : 'Crea un nuevo formulario.'}
                         </Typography>
-                        {currentFormId && // Mostrar solo si hay un form cargado
+                        {currentFormId && 
                             <Typography variant="caption" color="textSecondary">
                                 Última act. local: { getFormFromLocalStorage(currentFormId)?.data.lastUpdated ? new Date(getFormFromLocalStorage(currentFormId).data.lastUpdated).toLocaleString() : 'N/A'}
                             </Typography>
@@ -622,7 +578,7 @@ function App() {
                     </Box>
                 )}
 
-                {/* Contenido principal: Formulario o Lista o Dashboard */}
+                {/* --- MODIFICACIÓN CONTENIDO PRINCIPAL CON PANEL ADMIN --- */}
                 {viewMode === 'form' ? (
                     <Box sx={{ py: 4 }}>
                         <HeaderForm
@@ -630,93 +586,41 @@ function App() {
                             initialData={headerData}
                             onTipoEspacioChange={handleTipoEspacioChange}
                         />
-
-                        {/* Resumen de puntuación total */}
                         {(Object.keys(checklistSectionsData).length > 0 || tipoEspacio) && (
                             <Paper elevation={3} sx={{ p: 3, mb: 4, bgcolor: '#f5f5f5' }}>
                                 <Typography variant="h6" gutterBottom>Resumen de Evaluación</Typography>
                                 <Grid container spacing={2}>
-                                    <Grid item xs={12} md={3}>
-                                        <Box sx={{ p: 2, borderRadius: 1, bgcolor: 'white', border: '1px solid #e0e0e0', textAlign: 'center' }}>
-                                            <Typography variant="body2" color="textSecondary">Puntuación Total</Typography>
-                                            <Typography variant="h4" color="primary" fontWeight="bold">{puntuacionTotal.total}/{puntuacionTotal.maxPuntosPosibles}</Typography>
-                                            <Typography variant="body2" color="textSecondary">({puntuacionTotal.porcentajeCumplimiento}% de cumplimiento)</Typography>
-                                        </Box>
-                                    </Grid>
-                                    <Grid item xs={12} md={3}>
-                                        <Box sx={{ p: 2, borderRadius: 1, bgcolor: 'white', border: '1px solid #e0e0e0', textAlign: 'center' }}>
-                                            <Typography variant="body2" color="textSecondary">Promedio General</Typography>
-                                            <Typography variant="h4" fontWeight="bold" sx={{ color: puntuacionTotal.promedio >= 80 ? '#2e7d32' : puntuacionTotal.promedio >= 60 ? '#ed6c02' : '#d32f2f' }}>
-                                                {puntuacionTotal.promedio}/100
-                                            </Typography>
-                                        </Box>
-                                    </Grid>
-                                    <Grid item xs={12} md={3}>
-                                        <Box sx={{ p: 2, borderRadius: 1, bgcolor: 'white', border: '1px solid #e0e0e0', textAlign: 'center' }}>
-                                            <Typography variant="body2" color="textSecondary">Completado</Typography>
-                                            <Typography variant="h4" color="info.main" fontWeight="bold">{puntuacionTotal.completado}%</Typography>
-                                        </Box>
-                                    </Grid>
-                                    <Grid item xs={12} md={3}>
-                                        <Box sx={{ p: 2, borderRadius: 1, bgcolor: 'white', border: '1px solid #e0e0e0', textAlign: 'center' }}>
-                                            <Typography variant="body2" color="textSecondary">Tipo de Espacio</Typography>
-                                            <Typography variant="h6" fontWeight="bold">
-                                                {tipoEspacio === 'cdvfijo' ? 'CDV Fijo' : tipoEspacio === 'cdvparque' ? 'CDV Parque' : 'Sin definir'}
-                                            </Typography>
-                                        </Box>
-                                    </Grid>
+                                    <Grid item xs={12} md={3}><Box sx={{ p: 2, borderRadius: 1, bgcolor: 'white', border: '1px solid #e0e0e0', textAlign: 'center' }}><Typography variant="body2" color="textSecondary">Puntuación Total</Typography><Typography variant="h4" color="primary" fontWeight="bold">{puntuacionTotal.total}/{puntuacionTotal.maxPuntosPosibles}</Typography><Typography variant="body2" color="textSecondary">({puntuacionTotal.porcentajeCumplimiento}% de cumplimiento)</Typography></Box></Grid>
+                                    <Grid item xs={12} md={3}><Box sx={{ p: 2, borderRadius: 1, bgcolor: 'white', border: '1px solid #e0e0e0', textAlign: 'center' }}><Typography variant="body2" color="textSecondary">Promedio General</Typography><Typography variant="h4" fontWeight="bold" sx={{ color: puntuacionTotal.promedio >= 80 ? '#2e7d32' : puntuacionTotal.promedio >= 60 ? '#ed6c02' : '#d32f2f' }}>{puntuacionTotal.promedio}/100</Typography></Box></Grid>
+                                    <Grid item xs={12} md={3}><Box sx={{ p: 2, borderRadius: 1, bgcolor: 'white', border: '1px solid #e0e0e0', textAlign: 'center' }}><Typography variant="body2" color="textSecondary">Completado</Typography><Typography variant="h4" color="info.main" fontWeight="bold">{puntuacionTotal.completado}%</Typography></Box></Grid>
+                                    <Grid item xs={12} md={3}><Box sx={{ p: 2, borderRadius: 1, bgcolor: 'white', border: '1px solid #e0e0e0', textAlign: 'center' }}><Typography variant="body2" color="textSecondary">Tipo de Espacio</Typography><Typography variant="h6" fontWeight="bold">{tipoEspacio === 'cdvfijo' ? 'CDV Fijo' : tipoEspacio === 'cdvparque' ? 'CDV Parque' : 'Sin definir'}</Typography></Box></Grid>
                                 </Grid>
                             </Paper>
                         )}
-
                         <GeoLocationCapture onLocationChange={handleGeoLocationChange} initialData={geoLocation} />
-
                         {checklistItems.map((section) => (
                             <ChecklistSection key={section.title} title={section.title} items={section.items} onSectionDataChange={handleSectionDataChange} initialData={checklistSectionsData[section.title]} />
                         ))}
-
                         <SignatureCapture label="apoyo a la supervisión quien realiza la visita" onSignatureChange={handleSignatureChange} initialData={signatures['apoyo a la supervisión quien realiza la visita']} />
                         <SignatureCapture label="profesional/técnico del contratista quien atiende la visita" onSignatureChange={handleSignatureChange} initialData={signatures['profesional/técnico del contratista quien atiende la visita']} />
                         <Observations onObservationsChange={handleObservationsChange} initialData={generalObservations} />
                         <PhotoCapture onPhotosChange={handlePhotosChange} initialData={photos} />
-
                         <Box sx={{ mt: 3, pb: 4, display: 'flex', justifyContent: 'center', gap: 2 }}>
-                            <Button
-                                variant="contained"
-                                onClick={() => {
-                                    // Si hay cambios, guardar LOCALMENTE primero
-                                    if (formChanged) {
-                                        saveCurrentForm(); // Ya no sincroniza con Firebase
-                                    }
-                                    // Luego, generar PDF (que SÍ sincroniza)
-                                    generatePdf();
-                                }}
-                                sx={{ padding: '10px 30px', fontSize: '1.1rem' }}
-                                disabled={!currentFormId}>
-                                Finalizar y Generar PDF
-                            </Button>
-                            {/* Botón de guardado local actualizado */}
-                            <Button
-                                variant="outlined"
-                                onClick={saveCurrentForm}
-                                sx={{ padding: '10px 30px', fontSize: '1.1rem' }}
-                                disabled={!formChanged}
-                            >
-                                Guardar Localmente
-                            </Button>
+                            <Button variant="contained" onClick={() => { if (formChanged) saveCurrentForm(); generatePdf(); }} sx={{ padding: '10px 30px', fontSize: '1.1rem' }} disabled={!currentFormId}>Finalizar y Generar PDF</Button>
+                            <Button variant="outlined" onClick={saveCurrentForm} sx={{ padding: '10px 30px', fontSize: '1.1rem' }} disabled={!formChanged}>Guardar Localmente</Button>
                         </Box>
                     </Box>
                 ) : viewMode === 'saved' ? (
                     <SavedForms onLoadForm={loadSavedForm} user={user} />
                 ) : viewMode === 'dashboard' ? (
                     <Dashboard user={user} />
+                ) : viewMode === 'admin' ? ( 
+                    <AdminPanel user={user} /> 
                 ) : null}
+                {/* --- FIN MODIFICACIÓN CONTENIDO PRINCIPAL --- */}
 
-                {/* Notificaciones */}
                 <Snackbar open={notification.open} autoHideDuration={6000} onClose={handleCloseNotification} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
-                    <Alert onClose={handleCloseNotification} severity={notification.severity} sx={{ width: '100%' }} variant="filled">
-                        {notification.message}
-                    </Alert>
+                    <Alert onClose={handleCloseNotification} severity={notification.severity} sx={{ width: '100%' }} variant="filled">{notification.message}</Alert>
                 </Snackbar>
             </Container>
         </ThemeProvider>

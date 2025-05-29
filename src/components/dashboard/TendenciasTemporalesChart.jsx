@@ -1,294 +1,455 @@
-import React, { useMemo } from 'react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine } from 'recharts';
-import { Paper, Typography, Box, useTheme, ToggleButtonGroup, ToggleButton } from '@mui/material';
+import React, { useState, useEffect } from 'react';
+import { 
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, 
+  ResponsiveContainer, ReferenceLine, BarChart, Bar 
+} from 'recharts';
+import { 
+  Paper, Typography, Box, useTheme, ToggleButtonGroup, 
+  ToggleButton, Chip, Divider, Grid 
+} from '@mui/material';
 import CalendarViewWeekIcon from '@mui/icons-material/CalendarViewWeek';
 import CalendarViewMonthIcon from '@mui/icons-material/CalendarViewMonth';
+import TimelineIcon from '@mui/icons-material/Timeline';
+import ShowChartIcon from '@mui/icons-material/ShowChart';
 
 const TendenciasTemporalesChart = ({ datos }) => {
   const theme = useTheme();
-  const [agrupacion, setAgrupacion] = React.useState('semana');
-  
-  // Función para formatear fechas
-  const formatearFecha = (fecha) => {
-    if (!fecha) return '';
-    
-    try {
-      const partes = fecha.split('-');
-      if (partes.length === 3) {
-        return `${partes[2]}/${partes[1]}`;
-      }
-      return fecha;
-    } catch (e) {
-      return fecha;
-    }
+  const [agrupacion, setAgrupacion] = useState('dia'); // Cambio: empezar con 'dia' para datos recientes
+  const [vistaActiva, setVistaActiva] = useState('modalidad');
+  const [datosGrafico, setDatosGrafico] = useState([]);
+
+  // Colores para las líneas
+  const colores = {
+    general: theme.palette.grey[700],
+    cdvfijo: theme.palette.primary.main,
+    cdvparque: theme.palette.secondary.main,
+    tecnico: '#2196F3',
+    nutricion: '#4CAF50',
+    infraestructura: '#FF9800'
   };
 
-  // Cambiar tipo de agrupación
-  const handleAgrupacionChange = (event, newValue) => {
-    if (newValue !== null) {
-      setAgrupacion(newValue);
-    }
-  };
-  
-  // Procesar datos para tendencias temporales
-  const datosProcesados = useMemo(() => {
+  // Procesar datos cuando cambien
+  useEffect(() => {
+    console.log("Datos recibidos en TendenciasTemporales:", datos);
+    procesarDatos();
+  }, [datos, agrupacion, vistaActiva]);
+
+  const procesarDatos = () => {
+    // Verificar que tenemos datos
     if (!datos || !datos.formularios || datos.formularios.length === 0) {
-      return [];
+      console.log("No hay formularios para procesar");
+      setDatosGrafico([]);
+      return;
     }
-    
-    // Hacer una copia de los formularios para no modificar el original
-    const formulariosCopy = [...datos.formularios];
-    
-    // Ordenar por fecha
-    formulariosCopy.sort((a, b) => {
-      if (!a.fechaVisita) return 1;
-      if (!b.fechaVisita) return -1;
-      return new Date(a.fechaVisita) - new Date(b.fechaVisita);
-    });
-    
-    // Agrupar por periodos (semana o mes)
-    const periodos = {};
-    
-    formulariosCopy.forEach(form => {
+
+    console.log("Procesando", datos.formularios.length, "formularios");
+
+    // Agrupar por período
+    const periodos = new Map();
+
+    datos.formularios.forEach(form => {
       if (!form.fechaVisita) return;
-      
-      // Crear una fecha a partir de la cadena
+
+      let periodoKey, periodoLabel;
       const fecha = new Date(form.fechaVisita);
-      
-      // Determinar período según la agrupación
-      let periodoKey;
-      let periodoLabel;
-      
-      if (agrupacion === 'semana') {
-        // Obtener el inicio de semana (lunes)
+
+      if (agrupacion === 'dia') {
+        // Agrupar por día
+        periodoKey = form.fechaVisita;
+        periodoLabel = fecha.toLocaleDateString('es-CO', { 
+          day: 'numeric', 
+          month: 'short' 
+        });
+      } else if (agrupacion === 'semana') {
+        // Agrupar por semana
         const inicioSemana = new Date(fecha);
-        const diaSemana = fecha.getDay(); // 0 = Domingo, 1 = Lunes, etc.
-        const diffInicio = diaSemana === 0 ? 6 : diaSemana - 1; // Ajuste para que semana empiece en lunes
-        inicioSemana.setDate(fecha.getDate() - diffInicio);
-        
-        // Obtener el fin de semana (domingo)
-        const finSemana = new Date(inicioSemana);
-        finSemana.setDate(inicioSemana.getDate() + 6);
+        const dia = fecha.getDay();
+        const diff = fecha.getDate() - dia + (dia === 0 ? -6 : 1);
+        inicioSemana.setDate(diff);
         
         periodoKey = inicioSemana.toISOString().split('T')[0];
-        periodoLabel = `${inicioSemana.getDate()}/${inicioSemana.getMonth() + 1} - ${finSemana.getDate()}/${finSemana.getMonth() + 1}`;
+        periodoLabel = `Sem ${inicioSemana.getDate()}/${inicioSemana.getMonth() + 1}`;
       } else {
         // Agrupar por mes
         periodoKey = `${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, '0')}`;
-        periodoLabel = `${['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'][fecha.getMonth()]} ${fecha.getFullYear()}`;
+        const meses = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+        periodoLabel = `${meses[fecha.getMonth()]} ${fecha.getFullYear()}`;
       }
-      
-      // Inicializar el periodo si no existe
-      if (!periodos[periodoKey]) {
-        periodos[periodoKey] = {
-          fecha: periodoKey,
-          label: periodoLabel,
-          formularios: {
-            total: [],
-            cdvfijo: [],
-            cdvparque: []
-          }
-        };
-      }
-      
-      // Agregar formulario al total
-      periodos[periodoKey].formularios.total.push(form);
-      
-      // Agregar formulario por tipo
-      if (form.tipoEspacio === 'cdvfijo') {
-        periodos[periodoKey].formularios.cdvfijo.push(form);
-      } else if (form.tipoEspacio === 'cdvparque') {
-        periodos[periodoKey].formularios.cdvparque.push(form);
-      }
-    });
-    
-    // Calcular promedios para cada periodo
-    const resultado = Object.values(periodos).map(periodo => {
-      // Calcular promedio general
-      const promedioTotal = periodo.formularios.total.length > 0 
-        ? Math.round(periodo.formularios.total.reduce((sum, form) => sum + (form.porcentajeCumplimiento || 0), 0) / periodo.formularios.total.length) 
-        : 0;
-      
-      // Calcular promedio para cdvfijo
-      const promedioCDVFijo = periodo.formularios.cdvfijo.length > 0 
-        ? Math.round(periodo.formularios.cdvfijo.reduce((sum, form) => sum + (form.porcentajeCumplimiento || 0), 0) / periodo.formularios.cdvfijo.length) 
-        : null;
-      
-      // Calcular promedio para cdvparque
-      const promedioCDVParque = periodo.formularios.cdvparque.length > 0 
-        ? Math.round(periodo.formularios.cdvparque.reduce((sum, form) => sum + (form.porcentajeCumplimiento || 0), 0) / periodo.formularios.cdvparque.length) 
-        : null;
-      
-      return {
-        name: periodo.label,
-        fecha: periodo.fecha,
-        total: promedioTotal,
-        cdvfijo: promedioCDVFijo,
-        cdvparque: promedioCDVParque,
-        cantidadTotal: periodo.formularios.total.length,
-        cantidadFijo: periodo.formularios.cdvfijo.length,
-        cantidadParque: periodo.formularios.cdvparque.length
-      };
-    });
-    
-    // Limitar a los últimos 12 periodos si hay más
-    return resultado.slice(-12);
-  }, [datos, agrupacion]);
-  
-  // Si no hay datos, mostrar mensaje
-  if (!datos || !datos.formularios || datos.formularios.length === 0) {
-    return (
-      <Paper sx={{ p: 3, height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <Typography variant="body1" color="textSecondary">
-          No hay datos disponibles para mostrar tendencias temporales
-        </Typography>
-      </Paper>
-    );
-  }
 
-  // Personalizar tooltip
+      if (!periodos.has(periodoKey)) {
+        periodos.set(periodoKey, {
+          key: periodoKey,
+          label: periodoLabel,
+          formularios: []
+        });
+      }
+
+      periodos.get(periodoKey).formularios.push(form);
+    });
+
+    // Convertir a array y ordenar
+    const periodosArray = Array.from(periodos.values())
+      .sort((a, b) => a.key.localeCompare(b.key));
+
+    console.log("Períodos agrupados:", periodosArray.length);
+
+    // Procesar según vista
+    let resultado = [];
+
+    switch (vistaActiva) {
+      case 'modalidad':
+        resultado = procesarPorModalidad(periodosArray);
+        break;
+      case 'contratista':
+        resultado = procesarPorContratista(periodosArray);
+        break;
+      case 'componente':
+        resultado = procesarPorComponente(periodosArray);
+        break;
+    }
+
+    console.log("Datos procesados para gráfico:", resultado);
+    setDatosGrafico(resultado);
+  };
+
+  const procesarPorModalidad = (periodos) => {
+    return periodos.map(periodo => {
+      const resultado = {
+        periodo: periodo.label,
+        General: 0,
+        'Centro Fijo': 0,
+        'Parque/EC': 0,
+        // Contadores para el cálculo
+        totalGeneral: 0,
+        countGeneral: 0,
+        totalFijo: 0,
+        countFijo: 0,
+        totalParque: 0,
+        countParque: 0
+      };
+
+      periodo.formularios.forEach(form => {
+        const cumplimiento = Number(form.porcentajeCumplimiento) || 0;
+        
+        // Acumular para promedio general
+        resultado.totalGeneral += cumplimiento;
+        resultado.countGeneral++;
+
+        // Acumular por tipo
+        if (form.tipoEspacio === 'cdvfijo') {
+          resultado.totalFijo += cumplimiento;
+          resultado.countFijo++;
+        } else if (form.tipoEspacio === 'cdvparque') {
+          resultado.totalParque += cumplimiento;
+          resultado.countParque++;
+        }
+      });
+
+      // Calcular promedios
+      resultado.General = resultado.countGeneral > 0 
+        ? Math.round(resultado.totalGeneral / resultado.countGeneral) : null;
+      resultado['Centro Fijo'] = resultado.countFijo > 0 
+        ? Math.round(resultado.totalFijo / resultado.countFijo) : null;
+      resultado['Parque/EC'] = resultado.countParque > 0 
+        ? Math.round(resultado.totalParque / resultado.countParque) : null;
+
+      // Limpiar campos auxiliares
+      delete resultado.totalGeneral;
+      delete resultado.countGeneral;
+      delete resultado.totalFijo;
+      delete resultado.countFijo;
+      delete resultado.totalParque;
+      delete resultado.countParque;
+
+      return resultado;
+    });
+  };
+
+  const procesarPorContratista = (periodos) => {
+    // Obtener lista única de contratistas
+    const contratistasSet = new Set();
+    datos.formularios.forEach(form => {
+      if (form.contratista) contratistasSet.add(form.contratista);
+    });
+    const contratistas = Array.from(contratistasSet).sort();
+
+    return periodos.map(periodo => {
+      const resultado = { periodo: periodo.label };
+
+      // Inicializar contadores
+      const contadores = {};
+      contratistas.forEach(contratista => {
+        contadores[contratista] = { total: 0, count: 0 };
+      });
+
+      // Acumular datos
+      periodo.formularios.forEach(form => {
+        if (form.contratista && contadores[form.contratista]) {
+          contadores[form.contratista].total += Number(form.porcentajeCumplimiento) || 0;
+          contadores[form.contratista].count++;
+        }
+      });
+
+      // Calcular promedios
+      contratistas.forEach(contratista => {
+        const { total, count } = contadores[contratista];
+        resultado[contratista] = count > 0 ? Math.round(total / count) : null;
+      });
+
+      return resultado;
+    });
+  };
+
+  const procesarPorComponente = (periodos) => {
+    return periodos.map(periodo => {
+      const resultado = {
+        periodo: periodo.label,
+        'Técnico': null,
+        'Nutrición': null,
+        'Infraestructura': null
+      };
+
+      const contadores = {
+        tecnico: { total: 0, count: 0 },
+        nutricion: { total: 0, count: 0 },
+        infraestructura: { total: 0, count: 0 }
+      };
+
+      periodo.formularios.forEach(form => {
+        if (form.puntajePorComponente) {
+          Object.entries(form.puntajePorComponente).forEach(([componente, datos]) => {
+            const nombreLower = componente.toLowerCase();
+            let tipo = null;
+            
+            if (nombreLower.includes('técnico') || nombreLower.includes('tecnico')) {
+              tipo = 'tecnico';
+            } else if (nombreLower.includes('nutrición') || nombreLower.includes('nutricion')) {
+              tipo = 'nutricion';
+            } else if (nombreLower.includes('infraestructura')) {
+              tipo = 'infraestructura';
+            }
+
+            if (tipo && datos.porcentaje !== undefined) {
+              contadores[tipo].total += Number(datos.porcentaje) || 0;
+              contadores[tipo].count++;
+            }
+          });
+        }
+      });
+
+      // Calcular promedios
+      resultado['Técnico'] = contadores.tecnico.count > 0 
+        ? Math.round(contadores.tecnico.total / contadores.tecnico.count) : null;
+      resultado['Nutrición'] = contadores.nutricion.count > 0 
+        ? Math.round(contadores.nutricion.total / contadores.nutricion.count) : null;
+      resultado['Infraestructura'] = contadores.infraestructura.count > 0 
+        ? Math.round(contadores.infraestructura.total / contadores.infraestructura.count) : null;
+
+      return resultado;
+    });
+  };
+
+  // Obtener las líneas a mostrar
+  const obtenerLineas = () => {
+    if (datosGrafico.length === 0) return [];
+
+    const primeraFila = datosGrafico[0];
+    const keys = Object.keys(primeraFila).filter(key => key !== 'periodo');
+
+    if (vistaActiva === 'modalidad') {
+      return [
+        { dataKey: 'General', stroke: colores.general, strokeWidth: 3 },
+        { dataKey: 'Centro Fijo', stroke: colores.cdvfijo, strokeWidth: 2 },
+        { dataKey: 'Parque/EC', stroke: colores.cdvparque, strokeWidth: 2 }
+      ];
+    } else if (vistaActiva === 'componente') {
+      return [
+        { dataKey: 'Técnico', stroke: colores.tecnico, strokeWidth: 2 },
+        { dataKey: 'Nutrición', stroke: colores.nutricion, strokeWidth: 2 },
+        { dataKey: 'Infraestructura', stroke: colores.infraestructura, strokeWidth: 2 }
+      ];
+    } else {
+      // Para contratistas
+      const coloresDisponibles = ['#9C27B0', '#00BCD4', '#8BC34A', '#FF5722', '#795548', '#607D8B'];
+      return keys.map((key, index) => ({
+        dataKey: key,
+        stroke: coloresDisponibles[index % coloresDisponibles.length],
+        strokeWidth: 2
+      }));
+    }
+  };
+
+  // Tooltip personalizado
   const CustomTooltip = ({ active, payload, label }) => {
     if (active && payload && payload.length) {
       return (
-        <Paper sx={{ p: 2, bgcolor: 'rgba(255,255,255,0.95)', boxShadow: 2 }}>
-          <Typography variant="subtitle2" sx={{ mb: 1 }}>
+        <Paper sx={{ p: 1.5, bgcolor: 'rgba(255,255,255,0.95)' }}>
+          <Typography variant="subtitle2" gutterBottom>
             {label}
           </Typography>
-          
-          {payload.map((entry, index) => {
-            // Solo mostrar líneas con datos
-            if (entry.value === null) return null;
-            
-            let nombre = '';
-            let cantidad = 0;
-            
-            if (entry.dataKey === 'total') {
-              nombre = 'Promedio General';
-              cantidad = payload[0].payload.cantidadTotal;
-            } else if (entry.dataKey === 'cdvfijo') {
-              nombre = 'Centro de Vida Fijo';
-              cantidad = payload[0].payload.cantidadFijo;
-            } else if (entry.dataKey === 'cdvparque') {
-              nombre = 'Parques/Espacios Comunitarios';
-              cantidad = payload[0].payload.cantidadParque;
-            }
-            
-            return (
+          {payload
+            .filter(entry => entry.value !== null)
+            .map((entry, index) => (
               <Box key={index} sx={{ display: 'flex', alignItems: 'center', mb: 0.5 }}>
                 <Box
                   sx={{
-                    width: 12,
-                    height: 12,
-                    backgroundColor: entry.color,
-                    mr: 1,
-                    borderRadius: '50%'
+                    width: 10,
+                    height: 10,
+                    bgcolor: entry.color,
+                    borderRadius: '50%',
+                    mr: 1
                   }}
                 />
                 <Typography variant="body2">
-                  {nombre}: <strong>{entry.value}%</strong> ({cantidad} visitas)
+                  {entry.name}: <strong>{entry.value}%</strong>
                 </Typography>
               </Box>
-            );
-          })}
+            ))}
         </Paper>
       );
     }
     return null;
   };
 
-  return (
-    <Paper sx={{ p: 3, height: '100%' }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Typography variant="h6">
-          Tendencia de Cumplimiento por Modalidad
+  // Si no hay datos
+  if (!datos || !datos.formularios || datos.formularios.length === 0) {
+    return (
+      <Paper sx={{ p: 3 }}>
+        <Typography variant="h6" gutterBottom>
+          <TimelineIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
+          Análisis de Tendencias Temporales
         </Typography>
-        
-        <ToggleButtonGroup
-          value={agrupacion}
-          exclusive
-          onChange={handleAgrupacionChange}
-          size="small"
-        >
-          <ToggleButton value="semana">
-            <CalendarViewWeekIcon fontSize="small" sx={{ mr: 1 }} />
-            Semanal
-          </ToggleButton>
-          <ToggleButton value="mes">
-            <CalendarViewMonthIcon fontSize="small" sx={{ mr: 1 }} />
-            Mensual
-          </ToggleButton>
-        </ToggleButtonGroup>
+        <Box sx={{ height: 300, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <Typography color="textSecondary">
+            No hay datos disponibles para mostrar tendencias
+          </Typography>
+        </Box>
+      </Paper>
+    );
+  }
+
+  // Determinar si usar gráfico de barras o líneas
+  const usarBarras = datosGrafico.length <= 2;
+
+  return (
+    <Paper sx={{ p: 3 }}>
+      <Box sx={{ mb: 3 }}>
+        <Typography variant="h6" sx={{ mb: 2 }}>
+          <TimelineIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
+          Análisis de Tendencias Temporales
+        </Typography>
+
+        <Grid container spacing={2} alignItems="center">
+          <Grid item xs={12} md={6}>
+            <ToggleButtonGroup
+              value={vistaActiva}
+              exclusive
+              onChange={(e, newValue) => newValue && setVistaActiva(newValue)}
+              size="small"
+              fullWidth
+            >
+              <ToggleButton value="modalidad">Por Modalidad</ToggleButton>
+              <ToggleButton value="contratista">Por Contratista</ToggleButton>
+              <ToggleButton value="componente">Por Componente</ToggleButton>
+            </ToggleButtonGroup>
+          </Grid>
+          <Grid item xs={12} md={6}>
+            <ToggleButtonGroup
+              value={agrupacion}
+              exclusive
+              onChange={(e, newValue) => newValue && setAgrupacion(newValue)}
+              size="small"
+              fullWidth
+            >
+              <ToggleButton value="dia">Diario</ToggleButton>
+              <ToggleButton value="semana">
+                <CalendarViewWeekIcon sx={{ mr: 1 }} />
+                Semanal
+              </ToggleButton>
+              <ToggleButton value="mes">
+                <CalendarViewMonthIcon sx={{ mr: 1 }} />
+                Mensual
+              </ToggleButton>
+            </ToggleButtonGroup>
+          </Grid>
+        </Grid>
       </Box>
-      
-      <Box sx={{ height: 350, width: '100%' }}>
-        <ResponsiveContainer width="100%" height="100%">
-          <LineChart
-            data={datosProcesados}
-            margin={{ top: 10, right: 30, left: 10, bottom: 30 }}
-          >
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis 
-              dataKey="name" 
-              angle={-45} 
-              textAnchor="end"
-              height={70}
-              interval={0}
-            />
-            <YAxis 
-              domain={[0, 100]} 
-              label={{ 
-                value: '% Cumplimiento', 
-                angle: -90, 
-                position: 'insideLeft',
-                style: { textAnchor: 'middle' }
-              }} 
-            />
-            <Tooltip content={<CustomTooltip />} />
-            <Legend wrapperStyle={{ paddingTop: 15 }} />
-            
-            {/* Líneas de referencia */}
-            <ReferenceLine y={80} label="Bueno" stroke="green" strokeDasharray="3 3" />
-            <ReferenceLine y={60} label="Regular" stroke="orange" strokeDasharray="3 3" />
-            
-            {/* Línea para total */}
-            <Line
-              type="monotone"
-              dataKey="total"
-              name="Promedio General"
-              stroke={theme.palette.info.main}
-              strokeWidth={2.5}
-              dot={{ fill: theme.palette.info.main, strokeWidth: 2, r: 6 }}
-              activeDot={{ r: 8 }}
-            />
-            
-            {/* Línea para Centro de Vida Fijo */}
-            <Line
-              type="monotone"
-              dataKey="cdvfijo"
-              name="Centro de Vida Fijo"
-              stroke={theme.palette.primary.main}
-              strokeWidth={1.5}
-              dot={{ fill: theme.palette.primary.main }}
-              connectNulls={true}
-            />
-            
-            {/* Línea para Espacio Comunitario */}
-            <Line
-              type="monotone"
-              dataKey="cdvparque"
-              name="Parques/Espacios Comunitarios"
-              stroke={theme.palette.secondary.main}
-              strokeWidth={1.5}
-              dot={{ fill: theme.palette.secondary.main }}
-              connectNulls={true}
-            />
-          </LineChart>
-        </ResponsiveContainer>
-      </Box>
-      
-      <Typography variant="caption" sx={{ display: 'block', mt: 1, textAlign: 'center' }}>
-        Mostrando tendencia de cumplimiento para los últimos {datosProcesados.length} períodos
-      </Typography>
+
+      <Divider sx={{ mb: 2 }} />
+
+      {/* Mostrar resumen */}
+      {datosGrafico.length > 0 && (
+        <Box sx={{ mb: 2, display: 'flex', alignItems: 'center' }}>
+          <ShowChartIcon sx={{ mr: 1, color: 'text.secondary' }} />
+          <Typography variant="body2" color="text.secondary">
+            Mostrando {datosGrafico.length} {agrupacion === 'dia' ? 'días' : agrupacion === 'semana' ? 'semanas' : 'meses'} de datos
+          </Typography>
+        </Box>
+      )}
+
+      {/* Gráfico */}
+      {datosGrafico.length > 0 ? (
+        <Box sx={{ height: 400, width: '100%' }}>
+          <ResponsiveContainer>
+            {usarBarras ? (
+              <BarChart data={datosGrafico} margin={{ top: 5, right: 30, left: 20, bottom: 50 }}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="periodo" />
+                <YAxis domain={[0, 100]} />
+                <Tooltip content={<CustomTooltip />} />
+                <Legend />
+                <ReferenceLine y={80} stroke="green" strokeDasharray="5 5" />
+                <ReferenceLine y={60} stroke="orange" strokeDasharray="5 5" />
+                
+                {obtenerLineas().map((linea, index) => (
+                  <Bar
+                    key={index}
+                    dataKey={linea.dataKey}
+                    fill={linea.stroke}
+                  />
+                ))}
+              </BarChart>
+            ) : (
+              <LineChart data={datosGrafico} margin={{ top: 5, right: 30, left: 20, bottom: 50 }}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis 
+                  dataKey="periodo" 
+                  angle={-45}
+                  textAnchor="end"
+                  height={80}
+                />
+                <YAxis 
+                  domain={[0, 100]}
+                  label={{ value: '% Cumplimiento', angle: -90, position: 'insideLeft' }}
+                />
+                <Tooltip content={<CustomTooltip />} />
+                <Legend />
+                <ReferenceLine y={80} stroke="green" strokeDasharray="5 5" />
+                <ReferenceLine y={60} stroke="orange" strokeDasharray="5 5" />
+
+                {obtenerLineas().map((linea, index) => (
+                  <Line
+                    key={index}
+                    type="monotone"
+                    dataKey={linea.dataKey}
+                    stroke={linea.stroke}
+                    strokeWidth={linea.strokeWidth}
+                    dot={{ r: 4 }}
+                    activeDot={{ r: 6 }}
+                    connectNulls={false}
+                  />
+                ))}
+              </LineChart>
+            )}
+          </ResponsiveContainer>
+        </Box>
+      ) : (
+        <Box sx={{ height: 300, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <Typography color="textSecondary">
+            No hay suficientes datos para mostrar tendencias en la vista seleccionada
+          </Typography>
+        </Box>
+      )}
     </Paper>
   );
 };

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Box, Paper, TextField, Button, Typography, Alert, CircularProgress } from '@mui/material';
 import { login } from '../services/authService';
+import { updateLastLogin } from '../services/userRoleService';
 
 const Login = ({ onLoginSuccess }) => {
   const [email, setEmail] = useState('');
@@ -21,6 +22,10 @@ const Login = ({ onLoginSuccess }) => {
     
     try {
       const user = await login(email, password);
+      
+      // Registrar último login
+      await updateLastLogin(user.uid);
+      
       onLoginSuccess(user);
     } catch (error) {
       console.error('Error de inicio de sesión:', error);
