@@ -71,70 +71,146 @@ function App() {
         severity: 'success'
     });
 
-    // useEffect para autenticación y autorización (usa getUserRole y updateLastLogin de userRoleService)
+    // 🔧 MEJORA: Estado para manejar verificaciones de sesión sin perder datos
+    const [authVerifying, setAuthVerifying] = useState(false);
+
+    // 🔧 MEJORA: useEffect para autenticación más robusto
     useEffect(() => {
-      const unsubscribe = onAuthChange(async (user) => {
-        if (user) {
-          try {
-            const role = await getUserRole(user.uid); // Usa getUserRole de userRoleService
+        let authTimeout;
+        
+        const unsubscribe = onAuthChange(async (firebaseUser) => {
+            setAuthVerifying(true);
             
-            if (!role) {
-              console.log("Usuario no autorizado, cerrando sesión...");
-              await logout();
-              setUser(null);
-              setUserRole(null);
-              setNotification({
-                open: true,
-                message: 'Acceso denegado. Contacte al administrador.',
-                severity: 'error'
-              });
-            } else {
-              setUser(user);
-              setUserRole(role);
-              await updateLastLogin(user.uid); // Usa updateLastLogin de userRoleService
-            }
-          } catch (error) {
-            console.error("Error al verificar autorización:", error);
-            await logout();
-            setUser(null);
-            setUserRole(null);
-            setNotification({ 
-                open: true,
-                message: 'Error al verificar autorización. Sesión cerrada.',
-                severity: 'error'
-            });
-          }
-        } else {
-          setUser(null);
-          setUserRole(null);
-        }
-        setAuthChecked(true);
-      });
-      return () => unsubscribe();
-    }, []);
+            // 🔧 MEJORA: Debounce para evitar verificaciones múltiples rápidas
+            clearTimeout(authTimeout);
+            authTimeout = setTimeout(async () => {
+                try {
+                    if (firebaseUser) {
+                        const role = await getUserRole(firebaseUser.uid);
+                        
+                        if (!role) {
+                            console.log("Usuario no autorizado, cerrando sesión...");
+                            await logout();
+                            setUser(null);
+                            setUserRole(null);
+                            setNotification({
+                                open: true,
+                                message: 'Acceso denegado. Contacte al administrador.',
+                                severity: 'error'
+                            });
+                        } else {
+                            // 🔧 MEJORA: Solo actualizar usuario si realmente cambió
+                            if (!user || user.uid !== firebaseUser.uid) {
+                                setUser(firebaseUser);
+                                setUserRole(role);
+                                await updateLastLogin(firebaseUser.uid);
+                            }
+                        }
+                    } else {
+                        // 🔧 MEJORA: Solo resetear usuario si realmente no hay usuario
+                        // (evita resets durante verificaciones temporales)
+                        if (user) {
+                            setUser(null);
+                            setUserRole(null);
+                        }
+                    }
+                } catch (error) {
+                    console.error("Error al verificar autorización:", error);
+                    // 🔧 MEJORA: No cerrar sesión por errores de red temporales
+                    if (error.code !== 'unavailable' && error.code !== 'deadline-exceeded') {
+                        await logout();
+                        setUser(null);
+                        setUserRole(null);
+                        setNotification({ 
+                            open: true,
+                            message: 'Error al verificar autorización. Sesión cerrada.',
+                            severity: 'error'
+                        });
+                    }
+                } finally {
+                    setAuthChecked(true);
+                    setAuthVerifying(false);
+                }
+            }, 500); // 500ms de debounce
+        });
+
+        return () => {
+            unsubscribe();
+            clearTimeout(authTimeout);
+        };
+    }, []); // 🔧 MEJORA: Removido 'user' de dependencias para evitar loops
 
     // Limpiar formularios antiguos al inicio
     useEffect(() => {
         cleanupOldForms();
     }, []);
 
-    // Efecto para autoguardado (solo local)
+    // 🔧 MEJORA PRINCIPAL: Autoguardado completamente independiente de autenticación
     useEffect(() => {
-        if (formChanged && user) {
+        if (formChanged) { // 🎯 SIN dependencia de 'user'
             const autoSaveTimer = setTimeout(() => {
+                try {
+                    const formData = {
+                        headerData, 
+                        signatures, 
+                        generalObservations, 
+                        checklistSectionsData,
+                        photos, 
+                        geoLocation, 
+                        tipoEspacio, 
+                        puntuacionTotal,
+                        lastUpdated: new Date().toISOString()
+                    };
+                    
+                    const savedId = saveFormToLocalStorage(formData, currentFormId);
+                    if (savedId && currentFormId !== savedId) {
+                        setCurrentFormId(savedId);
+                    }
+                    setFormChanged(false);
+                    console.log('Autoguardado local completado independientemente de autenticación');
+                } catch (error) {
+                    console.error('Error en autoguardado local:', error);
+                }
+            }, 3000); // 🔧 MEJORA: Reducido a 3 segundos para guardado más frecuente
+            
+            return () => clearTimeout(autoSaveTimer);
+        }
+    }, [headerData, signatures, generalObservations, checklistSectionsData, photos, geoLocation, tipoEspacio, puntuacionTotal, formChanged, currentFormId]); // 🎯 SIN 'user'
+
+    // 🔧 MEJORA: Guardado de emergencia al perder foco de ventana
+    useEffect(() => {
+        const handleBeforeUnload = () => {
+            if (formChanged) {
                 const formData = {
                     headerData, signatures, generalObservations, checklistSectionsData,
                     photos, geoLocation, tipoEspacio, puntuacionTotal,
                     lastUpdated: new Date().toISOString()
                 };
-                const savedId = saveFormToLocalStorage(formData, currentFormId);
-                if (savedId && currentFormId !== savedId) setCurrentFormId(savedId);
-                setFormChanged(false);
-                console.log('Autoguardado en localStorage completado');
-            }, 5000);
-            return () => clearTimeout(autoSaveTimer);
-        }
-    }, [headerData, signatures, generalObservations, checklistSectionsData, photos, geoLocation, tipoEspacio, puntuacionTotal, formChanged, user, currentFormId]);
+                saveFormToLocalStorage(formData, currentFormId);
+                console.log('Guardado de emergencia antes de cerrar');
+            }
+        };
+
+        const handleVisibilityChange = () => {
+            if (document.hidden && formChanged) {
+                const formData = {
+                    headerData, signatures, generalObservations, checklistSectionsData,
+                    photos, geoLocation, tipoEspacio, puntuacionTotal,
+                    lastUpdated: new Date().toISOString()
+                };
+                saveFormToLocalStorage(formData, currentFormId);
+                console.log('Guardado de emergencia al minimizar ventana');
+            }
+        };
+
+        window.addEventListener('beforeunload', handleBeforeUnload);
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+
+        return () => {
+            window.removeEventListener('beforeunload', handleBeforeUnload);
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+        };
+    }, [formChanged, headerData, signatures, generalObservations, checklistSectionsData, photos, geoLocation, tipoEspacio, puntuacionTotal, currentFormId]);
 
     // Efecto para registrar cambios en los datos
     useEffect(() => {
@@ -199,18 +275,25 @@ function App() {
       }
     };
 
+    // 🔧 MEJORA: Función de guardado local que siempre funciona
     const saveCurrentForm = () => {
-        if (!formChanged || !user) return;
-        const formData = {
-            headerData, signatures, generalObservations, checklistSectionsData,
-            photos, geoLocation, tipoEspacio, puntuacionTotal,
-            lastUpdated: new Date().toISOString()
-        };
-        const savedId = saveFormToLocalStorage(formData, currentFormId);
-        if (savedId && currentFormId !== savedId) setCurrentFormId(savedId);
-        setNotification({ open: true, message: 'Cambios guardados localmente', severity: 'success' });
-        setFormChanged(false);
-        console.log("Guardado local completado");
+        if (!formChanged) return;
+        
+        try {
+            const formData = {
+                headerData, signatures, generalObservations, checklistSectionsData,
+                photos, geoLocation, tipoEspacio, puntuacionTotal,
+                lastUpdated: new Date().toISOString()
+            };
+            const savedId = saveFormToLocalStorage(formData, currentFormId);
+            if (savedId && currentFormId !== savedId) setCurrentFormId(savedId);
+            setNotification({ open: true, message: 'Cambios guardados localmente', severity: 'success' });
+            setFormChanged(false);
+            console.log("Guardado local manual completado");
+        } catch (error) {
+            console.error("Error en guardado local manual:", error);
+            setNotification({ open: true, message: 'Error al guardar localmente', severity: 'error' });
+        }
     };
 
     const loadSavedForm = (formId) => {
@@ -275,7 +358,7 @@ function App() {
         }));
     };
 
-    const generateTableData = () => { /* ... (sin cambios) ... */ 
+    const generateTableData = () => {
         const tableRows = [];
         checklistItems.forEach((section) => {
             tableRows.push([{ content: ' ', colSpan: 2, styles: { cellPadding: 3 } }]);
@@ -301,15 +384,19 @@ function App() {
         });
         return tableRows;
     };
-    const generatePdf = async () => { /* ... (sin cambios funcionales aquí, solo usa `user`) ... */ 
+
+    const generatePdf = async () => {
         let syncError = null;
         if (!currentFormId) {
             console.error("No hay formulario activo para finalizar.");
             setNotification({ open: true, message: 'Error: No hay formulario activo para finalizar.', severity: 'error' });
             return;
         }
+        
         markFormAsComplete(currentFormId);
-        if (user) { // `user` ya está en el scope
+        
+        // 🔧 MEJORA: Solo sincronizar con Firebase si hay usuario autenticado
+        if (user) {
             const summaryData = {
                 formId: currentFormId,
                 headerData: {
@@ -330,8 +417,8 @@ function App() {
                 },
                 checklistSectionsData: checklistSectionsData,
                 isComplete: true,
-                userid: user.uid || user.id, // `user` aquí
-                userEmail: user.email, // `user` aquí
+                userid: user.uid || user.id,
+                userEmail: user.email,
                 lastUpdated: new Date().toISOString() 
             };
             try {
@@ -342,6 +429,7 @@ function App() {
                 syncError = error; 
             }
         }
+        
         const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4', margins: { top: 40, bottom: 40, left: 20, right: 20 } });
         const standardTableHead = (title1, title2) => [[{ content: title1, styles: { halign: 'center', fillColor: [30, 136, 229], textColor: 255, fontSize: 12, fontStyle: 'bold' } }, { content: title2, styles: { halign: 'center', fillColor: [30, 136, 229], textColor: 255, fontSize: 12, fontStyle: 'bold' } }]];
         const pageWidth = doc.internal.pageSize.width;
@@ -437,17 +525,21 @@ function App() {
         const totalPages = doc.internal.getNumberOfPages();
         for (let i = 1; i <= totalPages; i++) { doc.setPage(i); addHeaderAndFooter(doc); }
         doc.save(`reporte_${headerData.espacioAtencion || 'supervision'}_${headerData.fechaVisita || 'fecha'}.pdf`);
+        
+        // 🔧 MEJORA: Notificaciones más claras sobre el estado de sincronización
         if (syncError) {
-            setNotification({ open: true, message: 'PDF generado. Error al sincronizar datos finalizados.', severity: 'warning' });
-        } else if (user) { // `user` aquí
-            setNotification({ open: true, message: 'PDF generado y datos finalizados sincronizados.', severity: 'success' });
+            setNotification({ open: true, message: 'PDF generado exitosamente. Error al sincronizar con Firebase (se guardó localmente).', severity: 'warning' });
+        } else if (user) {
+            setNotification({ open: true, message: 'PDF generado y datos sincronizados con Firebase exitosamente.', severity: 'success' });
         } else {
-            setNotification({ open: true, message: 'PDF generado. Datos guardados localmente.', severity: 'info' });
+            setNotification({ open: true, message: 'PDF generado exitosamente. Datos guardados localmente (sin sincronización).', severity: 'info' });
         }
         setFormChanged(false);
     };
-    const addHeaderAndFooter = (doc) => { /* ... (sin cambios) ... */ 
-        const pageWidth = doc.internal.pageSize.width; const pageHeight = doc.internal.pageSize.height;
+
+    const addHeaderAndFooter = (doc) => {
+        const pageWidth = doc.internal.pageSize.width; 
+        const pageHeight = doc.internal.pageSize.height;
         try {
             doc.addImage(HEADER_LOGO, 'JPEG', 0, 0, pageWidth, 30);
             doc.addImage(FOOTER_BANNER, 'JPEG', 0, pageHeight - 20, pageWidth, 20);
@@ -461,11 +553,19 @@ function App() {
         }
     };
 
-    if (!authChecked) {
+    // 🔧 MEJORA: Pantalla de carga que no interfiere con el estado del formulario
+    if (!authChecked || authVerifying) {
         return (
             <ThemeProvider theme={theme}>
                 <Container maxWidth="sm" sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
-                    <Typography>Verificando sesión...</Typography>
+                    <Box sx={{ textAlign: 'center' }}>
+                        <Typography variant="h6" gutterBottom>
+                            {authVerifying ? 'Verificando sesión...' : 'Iniciando aplicación...'}
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                            {formChanged ? 'Tus datos están seguros en el almacenamiento local' : 'Cargando...'}
+                        </Typography>
+                    </Box>
                 </Container>
             </ThemeProvider>
         );
@@ -478,7 +578,30 @@ function App() {
                     <Box sx={{ py: 4, mt: 8, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                         <Typography component="h1" variant="h4" gutterBottom align="center">Sistema de Visitas y Supervisión</Typography>
                         <Typography component="h2" variant="h6" color="text.secondary" align="center" sx={{ mb: 4 }}>Iniciar Sesión</Typography>
+                        
+                        {/* 🔧 MEJORA: Mostrar información sobre datos locales */}
+                        {(currentFormId || formChanged) && (
+                            <Alert severity="info" sx={{ mb: 2, width: '100%' }}>
+                                Tienes un formulario en progreso guardado localmente. 
+                                Puedes continuar trabajando sin iniciar sesión, pero para sincronizar necesitas autenticarte.
+                            </Alert>
+                        )}
+                        
                         <Login onLoginSuccess={handleLoginSuccess} />
+                        
+                        {/* 🔧 MEJORA: Opción para continuar sin iniciar sesión */}
+                        <Box sx={{ mt: 3, textAlign: 'center' }}>
+                            <Typography variant="body2" color="text.secondary" gutterBottom>
+                                ¿Quieres continuar sin iniciar sesión?
+                            </Typography>
+                            <Button
+                                variant="outlined"
+                                onClick={() => setViewMode('form')}
+                                sx={{ mt: 1 }}
+                            >
+                                Trabajar sin sincronización
+                            </Button>
+                        </Box>
                     </Box>
                 </Container>
                 <Snackbar open={notification.open} autoHideDuration={6000} onClose={handleCloseNotification} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
@@ -493,7 +616,6 @@ function App() {
             <Container maxWidth="lg">
                 <Paper sx={{ position: 'sticky', top: 0, zIndex: 1000, bgcolor: 'background.paper' }}>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', px: 2, borderBottom: 1, borderColor: 'divider' }}>
-                        {/* --- MODIFICACIÓN SECCIÓN TABS CON CONTROL DE ACCESO --- */}
                         <Tabs
                           value={viewMode}
                           onChange={(e, newValue) => {
@@ -516,7 +638,8 @@ function App() {
                               return;
                             }
                             
-                            if (formChanged && viewMode === 'form' && user) {
+                            // 🔧 MEJORA: Siempre guardar antes de cambiar de vista
+                            if (formChanged && viewMode === 'form') {
                               saveCurrentForm();
                             }
                             setViewMode(newValue);
@@ -532,7 +655,6 @@ function App() {
                             <Tab label="Administración" value="admin" />
                           )}
                         </Tabs>
-                        {/* --- FIN MODIFICACIÓN SECCIÓN TABS --- */}
 
                         {user && (
                             <Box sx={{ display: 'flex', alignItems: 'center', ml: 2 }}>
@@ -544,11 +666,17 @@ function App() {
                                     size="small"
                                     onClick={async () => {
                                         try {
+                                            // 🔧 MEJORA: Guardar antes de cerrar sesión
+                                            if (formChanged) {
+                                                saveCurrentForm();
+                                            }
+                                            
                                             await logout();
                                             setUser(null);
                                             setUserRole(null);
                                             setViewMode('form'); 
-                                            resetForm(); 
+                                            // 🔧 MEJORA: No resetear formulario al cerrar sesión
+                                            // resetForm(); 
                                         } catch (error) {
                                             console.error("Error al cerrar sesión:", error);
                                             setNotification({ open: true, message: 'Error al cerrar sesión.', severity: 'error' });
@@ -567,18 +695,31 @@ function App() {
                         <Typography variant="h5">{currentFormId ? 'Editando Formulario' : 'Nuevo Formulario'}</Typography>
                         <Typography variant="body2" color="textSecondary">
                             {currentFormId
-                                ? `ID: ${currentFormId.substring(0, 8)}... ${formChanged ? '(Cambios sin guardar localmente)' : '(Guardado localmente)'}`
+                                ? `ID: ${currentFormId.substring(0, 8)}... ${formChanged ? '(Cambios sin guardar)' : '(Guardado localmente)'}`
                                 : 'Crea un nuevo formulario.'}
                         </Typography>
+                        
+                        {/* 🔧 MEJORA: Indicador de estado más claro */}
+                        <Box sx={{ mt: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 1 }}>
+                            <Box sx={{ 
+                                width: 8, 
+                                height: 8, 
+                                borderRadius: '50%', 
+                                backgroundColor: formChanged ? 'warning.main' : 'success.main' 
+                            }} />
+                            <Typography variant="caption" color="text.secondary">
+                                {formChanged ? 'Cambios pendientes de guardar' : 'Todo guardado'}
+                            </Typography>
+                        </Box>
+                        
                         {currentFormId && 
-                            <Typography variant="caption" color="textSecondary">
+                            <Typography variant="caption" color="textSecondary" display="block">
                                 Última act. local: { getFormFromLocalStorage(currentFormId)?.data.lastUpdated ? new Date(getFormFromLocalStorage(currentFormId).data.lastUpdated).toLocaleString() : 'N/A'}
                             </Typography>
                         }
                     </Box>
                 )}
 
-                {/* --- MODIFICACIÓN CONTENIDO PRINCIPAL CON PANEL ADMIN --- */}
                 {viewMode === 'form' ? (
                     <Box sx={{ py: 4 }}>
                         <HeaderForm
@@ -617,7 +758,6 @@ function App() {
                 ) : viewMode === 'admin' ? ( 
                     <AdminPanel user={user} /> 
                 ) : null}
-                {/* --- FIN MODIFICACIÓN CONTENIDO PRINCIPAL --- */}
 
                 <Snackbar open={notification.open} autoHideDuration={6000} onClose={handleCloseNotification} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
                     <Alert onClose={handleCloseNotification} severity={notification.severity} sx={{ width: '100%' }} variant="filled">{notification.message}</Alert>

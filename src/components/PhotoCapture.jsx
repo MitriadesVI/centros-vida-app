@@ -13,13 +13,15 @@ import {
   Dialog,
   DialogTitle,
   DialogContent,
-  DialogActions
+  DialogActions,
+  ButtonGroup
 } from '@mui/material';
 import { 
   CameraAlt as CameraIcon, 
   Delete as DeleteIcon, 
   Edit as EditIcon,
-  Close as CloseIcon
+  Close as CloseIcon,
+  PhotoLibrary as GalleryIcon
 } from '@mui/icons-material';
 
 /**
@@ -32,15 +34,18 @@ const PhotoCapture = ({ onPhotosChange, initialData = [] }) => {
   const [currentDescription, setCurrentDescription] = useState('');
   const [editIndex, setEditIndex] = useState(null);
   const [openDialog, setOpenDialog] = useState(false);
-  const fileInputRef = useRef(null);
+  
+  // Referencias separadas para cámara y galería
+  const cameraInputRef = useRef(null);
+  const galleryInputRef = useRef(null);
   
   // Notificar al padre cuando cambien las fotos
   useEffect(() => {
     onPhotosChange(photos);
   }, [photos, onPhotosChange]);
   
-  // Manejador para la captura desde cámara o selección de archivos
-  const handleCapture = (event) => {
+  // Manejador para la captura desde cámara
+  const handleCameraCapture = (event) => {
     const files = event.target.files;
     if (files && files[0]) {
       const newPhoto = {
@@ -48,13 +53,36 @@ const PhotoCapture = ({ onPhotosChange, initialData = [] }) => {
         file: files[0],
         preview: URL.createObjectURL(files[0]),
         description: '',
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        source: 'camera' // Marcamos el origen
       };
       
       const updatedPhotos = [...photos, newPhoto];
       setPhotos(updatedPhotos);
       
       // Reiniciar el input para permitir seleccionar la misma imagen
+      event.target.value = null;
+    }
+  };
+
+  // Manejador para la selección desde galería
+  const handleGallerySelection = (event) => {
+    const files = event.target.files;
+    if (files && files.length > 0) {
+      // Permitir selección múltiple desde galería
+      const newPhotos = Array.from(files).map(file => ({
+        id: Date.now() + Math.random(), // ID único para cada foto
+        file: file,
+        preview: URL.createObjectURL(file),
+        description: '',
+        timestamp: new Date().toISOString(),
+        source: 'gallery' // Marcamos el origen
+      }));
+      
+      const updatedPhotos = [...photos, ...newPhotos];
+      setPhotos(updatedPhotos);
+      
+      // Reiniciar el input
       event.target.value = null;
     }
   };
@@ -77,6 +105,7 @@ const PhotoCapture = ({ onPhotosChange, initialData = [] }) => {
       setPhotos(updatedPhotos);
       setOpenDialog(false);
       setEditIndex(null);
+      setCurrentDescription('');
     }
   };
   
@@ -90,15 +119,25 @@ const PhotoCapture = ({ onPhotosChange, initialData = [] }) => {
     setPhotos(updatedPhotos);
   };
   
-  // Activar el input de archivo para capturar fotos
-  const triggerCapture = () => {
-    fileInputRef.current.click();
+  // Activar captura de cámara
+  const triggerCameraCapture = () => {
+    cameraInputRef.current.click();
+  };
+
+  // Activar selección de galería
+  const triggerGallerySelection = () => {
+    galleryInputRef.current.click();
   };
   
   // Formatear la fecha para mostrar
   const formatDate = (isoString) => {
     const date = new Date(isoString);
     return `${date.toLocaleDateString()} ${date.toLocaleTimeString()}`;
+  };
+
+  // Obtener el ícono según el origen de la foto
+  const getSourceIcon = (source) => {
+    return source === 'camera' ? '📷' : '🖼️';
   };
 
   return (
@@ -108,24 +147,46 @@ const PhotoCapture = ({ onPhotosChange, initialData = [] }) => {
       </Typography>
       
       <Box sx={{ mb: 2 }}>
-        <Button
-          variant="contained"
-          startIcon={<CameraIcon />}
-          onClick={triggerCapture}
-          sx={{ mr: 2 }}
-        >
-          Capturar Foto
-        </Button>
+        <ButtonGroup variant="contained" sx={{ mr: 2 }}>
+          <Button
+            startIcon={<CameraIcon />}
+            onClick={triggerCameraCapture}
+          >
+            Tomar Foto
+          </Button>
+          <Button
+            startIcon={<GalleryIcon />}
+            onClick={triggerGallerySelection}
+          >
+            Seleccionar de Galería
+          </Button>
+        </ButtonGroup>
         
+        {/* Input para captura de cámara */}
         <input
-          ref={fileInputRef}
+          ref={cameraInputRef}
           accept="image/*"
           type="file"
           capture="environment"
-          onChange={handleCapture}
+          onChange={handleCameraCapture}
+          style={{ display: 'none' }}
+        />
+        
+        {/* Input para selección de galería */}
+        <input
+          ref={galleryInputRef}
+          accept="image/*"
+          type="file"
+          multiple
+          onChange={handleGallerySelection}
           style={{ display: 'none' }}
         />
       </Box>
+
+      {/* Mensaje informativo */}
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+        Puedes tomar fotos nuevas con la cámara o seleccionar múltiples fotos existentes de tu galería.
+      </Typography>
       
       {photos.length > 0 && (
         <Grid container spacing={2}>
@@ -141,7 +202,10 @@ const PhotoCapture = ({ onPhotosChange, initialData = [] }) => {
                 />
                 <CardContent sx={{ flexGrow: 1 }}>
                   <Typography variant="body2" color="text.secondary" gutterBottom>
-                    {formatDate(photo.timestamp)}
+                    {getSourceIcon(photo.source)} {formatDate(photo.timestamp)}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary" gutterBottom display="block">
+                    {photo.source === 'camera' ? 'Tomada con cámara' : 'Seleccionada de galería'}
                   </Typography>
                   <Typography variant="body2">
                     {photo.description || 'Sin descripción'}
@@ -170,8 +234,19 @@ const PhotoCapture = ({ onPhotosChange, initialData = [] }) => {
         </Grid>
       )}
       
+      {/* Información del total de fotos */}
+      {photos.length > 0 && (
+        <Box sx={{ mt: 2, p: 2, backgroundColor: 'grey.100', borderRadius: 1 }}>
+          <Typography variant="body2" color="text.secondary">
+            Total de fotos: {photos.length} 
+            {photos.some(p => p.source === 'camera') && ` | Tomadas: ${photos.filter(p => p.source === 'camera').length}`}
+            {photos.some(p => p.source === 'gallery') && ` | De galería: ${photos.filter(p => p.source === 'gallery').length}`}
+          </Typography>
+        </Box>
+      )}
+      
       {/* Diálogo para editar descripción */}
-      <Dialog open={openDialog} onClose={() => setOpenDialog(false)}>
+      <Dialog open={openDialog} onClose={() => setOpenDialog(false)} maxWidth="sm" fullWidth>
         <DialogTitle>
           Agregar descripción
           <IconButton
@@ -194,10 +269,14 @@ const PhotoCapture = ({ onPhotosChange, initialData = [] }) => {
             rows={3}
             value={currentDescription}
             onChange={(e) => setCurrentDescription(e.target.value)}
+            placeholder="Describe qué se muestra en esta foto..."
           />
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleSaveDescription} color="primary">
+          <Button onClick={() => setOpenDialog(false)} color="secondary">
+            Cancelar
+          </Button>
+          <Button onClick={handleSaveDescription} color="primary" variant="contained">
             Guardar
           </Button>
         </DialogActions>
