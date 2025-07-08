@@ -26,7 +26,9 @@ import {
   Grid,
   Divider,
   IconButton,
-  Tooltip
+  Tooltip,
+  Tab,
+  Tabs
 } from '@mui/material';
 import { collection, getDocs, doc, getDoc, setDoc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../../firebase/config';
@@ -36,8 +38,17 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import SecurityIcon from '@mui/icons-material/Security';
+import PeopleIcon from '@mui/icons-material/People';
+import DescriptionIcon from '@mui/icons-material/Description';
+
+// Importar el nuevo componente
+import FormsManagement from './FormsManagement';
 
 const AdminPanel = ({ user }) => {
+  // 🆕 Estado para las pestañas
+  const [currentTab, setCurrentTab] = useState(0);
+
+  // TODOS tus estados existentes (sin cambios)
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -58,7 +69,12 @@ const AdminPanel = ({ user }) => {
   const [userToDelete, setUserToDelete] = useState(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
 
-  // Cargar usuarios al iniciar
+  // 🆕 Función para cambiar pestañas
+  const handleTabChange = (event, newValue) => {
+    setCurrentTab(newValue);
+  };
+
+  // TODA tu lógica existente (sin cambios)
   useEffect(() => {
     const fetchUsers = async () => {
       setLoading(true);
@@ -115,10 +131,13 @@ const AdminPanel = ({ user }) => {
       }
     };
 
-    fetchUsers();
-  }, []);
+    // 🆕 Solo cargar usuarios si estamos en la pestaña de usuarios
+    if (currentTab === 0) {
+      fetchUsers();
+    }
+  }, [currentTab]); // 🆕 Agregado currentTab como dependencia
 
-  // Funciones para gestionar el diálogo de cambio de rol
+  // TODAS tus funciones existentes (sin cambios)
   const handleOpenDialog = (user) => {
     setSelectedUser(user);
     setNewRole(user.role);
@@ -150,7 +169,6 @@ const AdminPanel = ({ user }) => {
     }
   };
   
-  // Funciones para gestionar el diálogo de registro de nuevo usuario
   const handleOpenRegisterDialog = () => {
     setRegisterDialogOpen(true);
     setNewUserEmail('');
@@ -224,7 +242,6 @@ const AdminPanel = ({ user }) => {
     }
   };
   
-  // Funciones para gestionar eliminación de usuario
   const handleOpenDeleteDialog = (user) => {
     setUserToDelete(user);
     setDeleteDialogOpen(true);
@@ -265,21 +282,163 @@ const AdminPanel = ({ user }) => {
     }
   };
 
-  // Mostrar cargando
-  if (loading) {
-    return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', my: 4 }}>
-        <CircularProgress />
-      </Box>
-    );
-  }
+  // Componente de gestión de usuarios (tu código actual)
+  const UserManagementTab = () => (
+    <>
+      {loading && currentTab === 0 && (
+        <Box sx={{ display: 'flex', justifyContent: 'center', my: 4 }}>
+          <CircularProgress />
+        </Box>
+      )}
+
+      {!loading && (
+        <Grid container spacing={3}>
+          <Grid item xs={12}>
+            <Paper sx={{ p: 3, mb: 4 }}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                <Typography variant="h6" gutterBottom>
+                  <SecurityIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
+                  Gestión de Usuarios
+                </Typography>
+                
+                <Button 
+                  variant="contained" 
+                  startIcon={<PersonAddIcon />}
+                  onClick={handleOpenRegisterDialog}
+                >
+                  Registrar Nuevo Usuario
+                </Button>
+              </Box>
+              
+              <Divider sx={{ mb: 3 }} />
+              
+              <TableContainer>
+                <Table>
+                  <TableHead>
+                    <TableRow>
+                      <TableCell sx={{ fontWeight: 'bold' }}>Email</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold' }}>Rol</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold' }}>Último Acceso</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold' }}>Creado</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold' }} align="center">Acciones</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {users.map((userData) => (
+                      <TableRow key={userData.id} hover>
+                        <TableCell>{userData.email}</TableCell>
+                        <TableCell>
+                          <Box sx={{ 
+                            bgcolor: 
+                              userData.role === ROLES.ADMIN ? '#e8f5e9' : 
+                              userData.role === ROLES.SUPERVISOR ? '#e3f2fd' : '#f5f5f5',
+                            py: 0.5,
+                            px: 1,
+                            borderRadius: 1,
+                            display: 'inline-block'
+                          }}>
+                            {userData.role}
+                          </Box>
+                        </TableCell>
+                        <TableCell>{userData.lastLogin}</TableCell>
+                        <TableCell>{userData.created}</TableCell>
+                        <TableCell align="center">
+                          <Box sx={{ display: 'flex', justifyContent: 'center', gap: 1 }}>
+                            <Tooltip title="Cambiar rol">
+                              <IconButton 
+                                color="primary"
+                                onClick={() => handleOpenDialog(userData)}
+                                disabled={user?.uid === userData.id}
+                              >
+                                <EditIcon fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                            
+                            <Tooltip title="Desactivar usuario">
+                              <IconButton 
+                                color="error"
+                                onClick={() => handleOpenDeleteDialog(userData)}
+                                disabled={
+                                  user?.uid === userData.id || 
+                                  userData.role === ROLES.ADMIN
+                                }
+                              >
+                                <DeleteIcon fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                          </Box>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+              
+              {users.length === 0 && (
+                <Typography variant="body1" sx={{ my: 2, textAlign: 'center' }}>
+                  No se encontraron usuarios
+                </Typography>
+              )}
+              
+              <Typography variant="body2" color="textSecondary" sx={{ mt: 3 }}>
+                Total de usuarios: {users.length} ({users.filter(u => u.role === ROLES.ADMIN).length} administradores, 
+                {users.filter(u => u.role === ROLES.SUPERVISOR).length} supervisores, 
+                {users.filter(u => u.role === ROLES.APOYO).length} apoyo)
+              </Typography>
+            </Paper>
+          </Grid>
+          
+          <Grid item xs={12}>
+            <Paper sx={{ p: 3 }}>
+              <Typography variant="h6" gutterBottom color="primary">
+                Guía de roles
+              </Typography>
+              <Typography variant="body2" paragraph>
+                Los usuarios con diferentes roles tienen distintos niveles de acceso en la aplicación:
+              </Typography>
+              
+              <Grid container spacing={2}>
+                <Grid item xs={12} md={4}>
+                  <Paper variant="outlined" sx={{ p: 2, bgcolor: '#e8f5e9' }}>
+                    <Typography variant="subtitle1" fontWeight="bold">Administrador</Typography>
+                    <Typography variant="body2">
+                      Acceso completo a formularios, dashboard y panel de administración. Puede crear y gestionar usuarios.
+                    </Typography>
+                  </Paper>
+                </Grid>
+                
+                <Grid item xs={12} md={4}>
+                  <Paper variant="outlined" sx={{ p: 2, bgcolor: '#e3f2fd' }}>
+                    <Typography variant="subtitle1" fontWeight="bold">Supervisor</Typography>
+                    <Typography variant="body2">
+                      Acceso a formularios y dashboard. Puede ver todas las métricas y supervisar el desempeño.
+                    </Typography>
+                  </Paper>
+                </Grid>
+                
+                <Grid item xs={12} md={4}>
+                  <Paper variant="outlined" sx={{ p: 2, bgcolor: '#f5f5f5' }}>
+                    <Typography variant="subtitle1" fontWeight="bold">Apoyo</Typography>
+                    <Typography variant="body2">
+                      Acceso solamente a formularios. Puede llenar y guardar formularios pero no puede ver las estadísticas.
+                    </Typography>
+                  </Paper>
+                </Grid>
+              </Grid>
+            </Paper>
+          </Grid>
+        </Grid>
+      )}
+    </>
+  );
 
   return (
-    <Container>
+    <Container maxWidth="lg">
       <Typography variant="h4" gutterBottom sx={{ mt: 4 }}>
         Panel de Administración
       </Typography>
       
+      {/* 🆕 Alertas globales */}
       {error && (
         <Alert severity="error" sx={{ mb: 3 }}>
           {error}
@@ -292,142 +451,35 @@ const AdminPanel = ({ user }) => {
         </Alert>
       )}
       
-      <Grid container spacing={3}>
-        <Grid item xs={12}>
-          <Paper sx={{ p: 3, mb: 4 }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-              <Typography variant="h6" gutterBottom>
-                <SecurityIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
-                Gestión de Usuarios
-              </Typography>
-              
-              <Button 
-                variant="contained" 
-                startIcon={<PersonAddIcon />}
-                onClick={handleOpenRegisterDialog}
-              >
-                Registrar Nuevo Usuario
-              </Button>
-            </Box>
-            
-            <Divider sx={{ mb: 3 }} />
-            
-            <TableContainer>
-              <Table>
-                <TableHead>
-                  <TableRow>
-                    <TableCell sx={{ fontWeight: 'bold' }}>Email</TableCell>
-                    <TableCell sx={{ fontWeight: 'bold' }}>Rol</TableCell>
-                    <TableCell sx={{ fontWeight: 'bold' }}>Último Acceso</TableCell>
-                    <TableCell sx={{ fontWeight: 'bold' }}>Creado</TableCell>
-                    <TableCell sx={{ fontWeight: 'bold' }} align="center">Acciones</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {users.map((userData) => (
-                    <TableRow key={userData.id} hover>
-                      <TableCell>{userData.email}</TableCell>
-                      <TableCell>
-                        <Box sx={{ 
-                          bgcolor: 
-                            userData.role === ROLES.ADMIN ? '#e8f5e9' : 
-                            userData.role === ROLES.SUPERVISOR ? '#e3f2fd' : '#f5f5f5',
-                          py: 0.5,
-                          px: 1,
-                          borderRadius: 1,
-                          display: 'inline-block'
-                        }}>
-                          {userData.role}
-                        </Box>
-                      </TableCell>
-                      <TableCell>{userData.lastLogin}</TableCell>
-                      <TableCell>{userData.created}</TableCell>
-                      <TableCell align="center">
-                        <Box sx={{ display: 'flex', justifyContent: 'center', gap: 1 }}>
-                          <Tooltip title="Cambiar rol">
-                            <IconButton 
-                              color="primary"
-                              onClick={() => handleOpenDialog(userData)}
-                              disabled={user?.uid === userData.id} // No permitir cambiar el propio rol
-                            >
-                              <EditIcon fontSize="small" />
-                            </IconButton>
-                          </Tooltip>
-                          
-                          <Tooltip title="Desactivar usuario">
-                            <IconButton 
-                              color="error"
-                              onClick={() => handleOpenDeleteDialog(userData)}
-                              disabled={
-                                user?.uid === userData.id || // No permitir eliminarse a sí mismo
-                                userData.role === ROLES.ADMIN // No permitir eliminar otros admins
-                              }
-                            >
-                              <DeleteIcon fontSize="small" />
-                            </IconButton>
-                          </Tooltip>
-                        </Box>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </TableContainer>
-            
-            {users.length === 0 && (
-              <Typography variant="body1" sx={{ my: 2, textAlign: 'center' }}>
-                No se encontraron usuarios
-              </Typography>
-            )}
-            
-            <Typography variant="body2" color="textSecondary" sx={{ mt: 3 }}>
-              Total de usuarios: {users.length} ({users.filter(u => u.role === ROLES.ADMIN).length} administradores, 
-              {users.filter(u => u.role === ROLES.SUPERVISOR).length} supervisores, 
-              {users.filter(u => u.role === ROLES.APOYO).length} apoyo)
-            </Typography>
-          </Paper>
-        </Grid>
+      {/* 🆕 Pestañas */}
+      <Paper sx={{ mt: 3 }}>
+        <Tabs 
+          value={currentTab} 
+          onChange={handleTabChange}
+          sx={{ borderBottom: 1, borderColor: 'divider' }}
+        >
+          <Tab 
+            icon={<PeopleIcon />} 
+            label="Gestión de Usuarios" 
+            iconPosition="start"
+          />
+          <Tab 
+            icon={<DescriptionIcon />} 
+            label="Gestión de Formularios" 
+            iconPosition="start"
+          />
+        </Tabs>
         
-        <Grid item xs={12}>
-          <Paper sx={{ p: 3 }}>
-            <Typography variant="h6" gutterBottom color="primary">
-              Guía de roles
-            </Typography>
-            <Typography variant="body2" paragraph>
-              Los usuarios con diferentes roles tienen distintos niveles de acceso en la aplicación:
-            </Typography>
-            
-            <Grid container spacing={2}>
-              <Grid item xs={12} md={4}>
-                <Paper variant="outlined" sx={{ p: 2, bgcolor: '#e8f5e9' }}>
-                  <Typography variant="subtitle1" fontWeight="bold">Administrador</Typography>
-                  <Typography variant="body2">
-                    Acceso completo a formularios, dashboard y panel de administración. Puede crear y gestionar usuarios.
-                  </Typography>
-                </Paper>
-              </Grid>
-              
-              <Grid item xs={12} md={4}>
-                <Paper variant="outlined" sx={{ p: 2, bgcolor: '#e3f2fd' }}>
-                  <Typography variant="subtitle1" fontWeight="bold">Supervisor</Typography>
-                  <Typography variant="body2">
-                    Acceso a formularios y dashboard. Puede ver todas las métricas y supervisar el desempeño.
-                  </Typography>
-                </Paper>
-              </Grid>
-              
-              <Grid item xs={12} md={4}>
-                <Paper variant="outlined" sx={{ p: 2, bgcolor: '#f5f5f5' }}>
-                  <Typography variant="subtitle1" fontWeight="bold">Apoyo</Typography>
-                  <Typography variant="body2">
-                    Acceso solamente a formularios. Puede llenar y guardar formularios pero no puede ver las estadísticas.
-                  </Typography>
-                </Paper>
-              </Grid>
-            </Grid>
-          </Paper>
-        </Grid>
-      </Grid>
+        <Box sx={{ p: 3 }}>
+          {/* Pestaña 0: Gestión de Usuarios (tu código actual) */}
+          {currentTab === 0 && <UserManagementTab />}
+          
+          {/* Pestaña 1: Gestión de Formularios (nuevo componente) */}
+          {currentTab === 1 && <FormsManagement />}
+        </Box>
+      </Paper>
+      
+      {/* TODOS tus diálogos existentes (sin cambios) */}
       
       {/* Diálogo para cambiar rol */}
       <Dialog open={dialogOpen} onClose={handleCloseDialog}>

@@ -44,21 +44,36 @@ const PhotoCapture = ({ onPhotosChange, initialData = [] }) => {
     onPhotosChange(photos);
   }, [photos, onPhotosChange]);
   
+  // Convertir archivo a base64 para garantizar disponibilidad en PDF
+  const convertFileToBase64 = (file) => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  };
+
   // Manejador para la captura desde cámara
-  const handleCameraCapture = (event) => {
+  const handleCameraCapture = async (event) => {
     const files = event.target.files;
     if (files && files[0]) {
-      const newPhoto = {
-        id: Date.now(),
-        file: files[0],
-        preview: URL.createObjectURL(files[0]),
-        description: '',
-        timestamp: new Date().toISOString(),
-        source: 'camera' // Marcamos el origen
-      };
-      
-      const updatedPhotos = [...photos, newPhoto];
-      setPhotos(updatedPhotos);
+      try {
+        const base64Data = await convertFileToBase64(files[0]);
+        const newPhoto = {
+          id: Date.now(),
+          file: files[0],
+          preview: base64Data, // Usar base64 en lugar de createObjectURL
+          description: '',
+          timestamp: new Date().toISOString(),
+          source: 'camera' // Marcamos el origen
+        };
+        
+        const updatedPhotos = [...photos, newPhoto];
+        setPhotos(updatedPhotos);
+      } catch (error) {
+        console.error('Error al procesar la imagen de cámara:', error);
+      }
       
       // Reiniciar el input para permitir seleccionar la misma imagen
       event.target.value = null;
@@ -66,21 +81,30 @@ const PhotoCapture = ({ onPhotosChange, initialData = [] }) => {
   };
 
   // Manejador para la selección desde galería
-  const handleGallerySelection = (event) => {
+  const handleGallerySelection = async (event) => {
     const files = event.target.files;
     if (files && files.length > 0) {
-      // Permitir selección múltiple desde galería
-      const newPhotos = Array.from(files).map(file => ({
-        id: Date.now() + Math.random(), // ID único para cada foto
-        file: file,
-        preview: URL.createObjectURL(file),
-        description: '',
-        timestamp: new Date().toISOString(),
-        source: 'gallery' // Marcamos el origen
-      }));
-      
-      const updatedPhotos = [...photos, ...newPhotos];
-      setPhotos(updatedPhotos);
+      try {
+        // Convertir todas las fotos a base64 para garantizar disponibilidad en PDF
+        const newPhotos = await Promise.all(
+          Array.from(files).map(async (file) => {
+            const base64Data = await convertFileToBase64(file);
+            return {
+              id: Date.now() + Math.random(), // ID único para cada foto
+              file: file,
+              preview: base64Data, // Usar base64 en lugar de createObjectURL
+              description: '',
+              timestamp: new Date().toISOString(),
+              source: 'gallery' // Marcamos el origen
+            };
+          })
+        );
+        
+        const updatedPhotos = [...photos, ...newPhotos];
+        setPhotos(updatedPhotos);
+      } catch (error) {
+        console.error('Error al procesar las imágenes de galería:', error);
+      }
       
       // Reiniciar el input
       event.target.value = null;
@@ -113,8 +137,11 @@ const PhotoCapture = ({ onPhotosChange, initialData = [] }) => {
   const handleDeletePhoto = (index) => {
     const updatedPhotos = photos.filter((_, i) => i !== index);
     
-    // Revocamos la URL del objeto para evitar fugas de memoria
-    URL.revokeObjectURL(photos[index].preview);
+    // Solo revocar la URL si es un ObjectURL (no base64)
+    const photo = photos[index];
+    if (photo.preview && photo.preview.startsWith('blob:')) {
+      URL.revokeObjectURL(photo.preview);
+    }
     
     setPhotos(updatedPhotos);
   };

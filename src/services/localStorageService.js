@@ -16,6 +16,15 @@ export const saveFormToLocalStorage = (formData, formId = null) => {
     // Usar la fecha actual como identificador si no se proporciona uno
     const id = formId || `form_${new Date().toISOString()}`;
     
+    console.log('💾 LocalStorage: Guardando formulario con ID:', id);
+    console.log('💾 LocalStorage: Datos a guardar:', {
+      headerKeys: Object.keys(formData.headerData || {}),
+      observationsLength: formData.generalObservations?.length || 0,
+      checklistSections: Object.keys(formData.checklistSectionsData || {}),
+      photosCount: formData.photos?.length || 0,
+      observationsContent: formData.generalObservations
+    });
+    
     // Crear o actualizar el objeto del formulario con metadatos
     const formObject = {
       id,
@@ -26,13 +35,14 @@ export const saveFormToLocalStorage = (formData, formId = null) => {
     
     // Guardar el formulario individual
     localStorage.setItem(`${STORAGE_KEY}_${id}`, JSON.stringify(formObject));
+    console.log('✅ LocalStorage: Formulario guardado exitosamente en localStorage');
     
     // Actualizar la lista de formularios
     updateFormsList(id, formObject);
     
     return id;
   } catch (error) {
-    console.error('Error al guardar en localStorage:', error);
+    console.error('❌ LocalStorage: Error al guardar en localStorage:', error);
     return null;
   }
 };
@@ -83,12 +93,27 @@ const updateFormsList = (formId, formMetadata) => {
  */
 export const getFormFromLocalStorage = (formId) => {
   try {
+    console.log('📂 LocalStorage: Recuperando formulario con ID:', formId);
     const formJSON = localStorage.getItem(`${STORAGE_KEY}_${formId}`);
-    if (!formJSON) return null;
+    if (!formJSON) {
+      console.log('📂 LocalStorage: No se encontró formulario con ese ID');
+      return null;
+    }
     
-    return JSON.parse(formJSON);
+    const formData = JSON.parse(formJSON);
+    console.log('📂 LocalStorage: Formulario encontrado:', {
+      id: formData.id,
+      lastUpdated: formData.lastUpdated,
+      status: formData.status,
+      hasData: !!formData.data,
+      observationsLength: formData.data?.generalObservations?.length || 0,
+      checklistSections: Object.keys(formData.data?.checklistSectionsData || {}),
+      observationsContent: formData.data?.generalObservations
+    });
+    
+    return formData;
   } catch (error) {
-    console.error('Error al recuperar del localStorage:', error);
+    console.error('❌ LocalStorage: Error al recuperar del localStorage:', error);
     return null;
   }
 };

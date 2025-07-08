@@ -4,13 +4,24 @@ import '../styles/forms.css';
 const Observations = ({ onObservationsChange, initialData = '' }) => {
     const [observations, setObservations] = useState(initialData);
 
+    // Inicializar con datos iniciales si los hay
+    useEffect(() => {
+        if (initialData && initialData !== observations) {
+            setObservations(initialData);
+            console.log('📝 Observations: Datos iniciales cargados:', initialData);
+        }
+    }, [initialData, observations]);
+
     useEffect(() => {
         // Notificar al componente padre cuando las observaciones cambien
         onObservationsChange(observations);
+        console.log('📝 Observations: Cambio detectado, notificando al padre:', observations);
     }, [observations, onObservationsChange]);
 
     const handleChange = (e) => {
-        setObservations(e.target.value);
+        const newValue = e.target.value;
+        setObservations(newValue);
+        console.log('📝 Observations: Usuario escribió:', newValue);
     };
 
     return (

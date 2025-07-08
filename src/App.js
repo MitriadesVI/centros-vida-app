@@ -148,6 +148,7 @@ function App() {
     // 🔧 MEJORA PRINCIPAL: Autoguardado completamente independiente de autenticación
     useEffect(() => {
         if (formChanged) { // 🎯 SIN dependencia de 'user'
+            console.log('⏱️ App: Iniciando timer de autoguardado (3 segundos)');
             const autoSaveTimer = setTimeout(() => {
                 try {
                     const formData = {
@@ -162,18 +163,29 @@ function App() {
                         lastUpdated: new Date().toISOString()
                     };
                     
+                    console.log('💾 App: Ejecutando autoguardado con datos:', {
+                        headerKeys: Object.keys(headerData),
+                        observationsLength: generalObservations?.length || 0,
+                        checklistSections: Object.keys(checklistSectionsData),
+                        photosCount: photos.length,
+                        observationsContent: generalObservations
+                    });
+                    
                     const savedId = saveFormToLocalStorage(formData, currentFormId);
                     if (savedId && currentFormId !== savedId) {
                         setCurrentFormId(savedId);
                     }
                     setFormChanged(false);
-                    console.log('Autoguardado local completado independientemente de autenticación');
+                    console.log('✅ App: Autoguardado local completado exitosamente, ID:', savedId);
                 } catch (error) {
-                    console.error('Error en autoguardado local:', error);
+                    console.error('❌ App: Error en autoguardado local:', error);
                 }
             }, 3000); // 🔧 MEJORA: Reducido a 3 segundos para guardado más frecuente
             
-            return () => clearTimeout(autoSaveTimer);
+            return () => {
+                console.log('🔄 App: Cancelando timer de autoguardado');
+                clearTimeout(autoSaveTimer);
+            };
         }
     }, [headerData, signatures, generalObservations, checklistSectionsData, photos, geoLocation, tipoEspacio, puntuacionTotal, formChanged, currentFormId]); // 🎯 SIN 'user'
 
@@ -214,7 +226,27 @@ function App() {
 
     // Efecto para registrar cambios en los datos
     useEffect(() => {
-        if (currentFormId || (Object.keys(headerData).length > 2 || generalObservations || Object.keys(checklistSectionsData).length > 0 || photos.length > 0 || Object.keys(signatures).some(k => signatures[k].data) || Object.keys(geoLocation).length > 0)) {
+        const hasHeaderData = Object.keys(headerData).length > 2;
+        const hasObservations = generalObservations && generalObservations.trim().length > 0;
+        const hasChecklistData = Object.keys(checklistSectionsData).length > 0;
+        const hasPhotos = photos.length > 0;
+        const hasSignatures = Object.keys(signatures).some(k => signatures[k].data);
+        const hasGeoLocation = Object.keys(geoLocation).length > 0;
+        
+        console.log('🔍 App: Detectando cambios:', {
+            currentFormId: !!currentFormId,
+            hasHeaderData,
+            hasObservations,
+            hasChecklistData,
+            hasPhotos,
+            hasSignatures,
+            hasGeoLocation,
+            observationsLength: generalObservations?.length || 0,
+            checklistSections: Object.keys(checklistSectionsData).length
+        });
+        
+        if (currentFormId || hasHeaderData || hasObservations || hasChecklistData || hasPhotos || hasSignatures || hasGeoLocation) {
+            console.log('✅ App: Marcando formulario como cambiado');
             setFormChanged(true);
         }
     }, [headerData, signatures, generalObservations, checklistSectionsData, photos, geoLocation, currentFormId]);
@@ -277,7 +309,11 @@ function App() {
 
     // 🔧 MEJORA: Función de guardado local que siempre funciona
     const saveCurrentForm = () => {
-        if (!formChanged) return;
+        console.log('💾 App: Iniciando guardado manual, formChanged:', formChanged);
+        if (!formChanged) {
+            console.log('⚠️ App: No hay cambios para guardar');
+            return;
+        }
         
         try {
             const formData = {
@@ -285,22 +321,48 @@ function App() {
                 photos, geoLocation, tipoEspacio, puntuacionTotal,
                 lastUpdated: new Date().toISOString()
             };
+            
+            console.log('💾 App: Guardando manualmente con datos:', {
+                headerKeys: Object.keys(headerData),
+                observationsLength: generalObservations?.length || 0,
+                checklistSections: Object.keys(checklistSectionsData),
+                photosCount: photos.length,
+                observationsContent: generalObservations
+            });
+            
             const savedId = saveFormToLocalStorage(formData, currentFormId);
             if (savedId && currentFormId !== savedId) setCurrentFormId(savedId);
             setNotification({ open: true, message: 'Cambios guardados localmente', severity: 'success' });
             setFormChanged(false);
-            console.log("Guardado local manual completado");
+            console.log("✅ App: Guardado local manual completado exitosamente, ID:", savedId);
         } catch (error) {
-            console.error("Error en guardado local manual:", error);
+            console.error("❌ App: Error en guardado local manual:", error);
             setNotification({ open: true, message: 'Error al guardar localmente', severity: 'error' });
         }
     };
 
     const loadSavedForm = (formId) => {
-        if (!formId) { resetForm(); setViewMode('form'); return; }
+        console.log('📂 App: Intentando cargar formulario:', formId);
+        if (!formId) { 
+            console.log('📂 App: No hay formId, reseteando formulario');
+            resetForm(); 
+            setViewMode('form'); 
+            return; 
+        }
+        
         const savedForm = getFormFromLocalStorage(formId);
+        console.log('📂 App: Formulario recuperado del localStorage:', savedForm);
+        
         if (savedForm && savedForm.data) {
             const { data } = savedForm;
+            console.log('📂 App: Cargando datos del formulario:', {
+                headerKeys: Object.keys(data.headerData || {}),
+                observationsLength: data.generalObservations?.length || 0,
+                checklistSections: Object.keys(data.checklistSectionsData || {}),
+                photosCount: data.photos?.length || 0,
+                observationsContent: data.generalObservations
+            });
+            
             setHeaderData(data.headerData || {});
             setSignatures(data.signatures || {
                 'apoyo a la supervisión quien realiza la visita': { data: '', checked: false },
@@ -316,7 +378,9 @@ function App() {
             setFormChanged(false);
             setViewMode('form');
             setNotification({ open: true, message: 'Formulario cargado correctamente', severity: 'success' });
+            console.log('✅ App: Formulario cargado exitosamente');
         } else {
+            console.log('❌ App: No se pudo cargar el formulario');
             setNotification({ open: true, message: 'No se pudo cargar el formulario', severity: 'error' });
             resetForm();
         }
@@ -348,7 +412,10 @@ function App() {
         const normalizedRole = role.toLowerCase();
         setSignatures(prev => ({ ...prev, [normalizedRole]: { data: signatureData, checked } }));
     };
-    const handleObservationsChange = (observations) => setGeneralObservations(observations);
+    const handleObservationsChange = (observations) => {
+        console.log('🔄 App: Recibiendo cambio de observaciones:', observations);
+        setGeneralObservations(observations);
+    };
     const handlePhotosChange = (newPhotos) => setPhotos(newPhotos);
     const handleGeoLocationChange = (location) => setGeoLocation(location);
     const handleSectionDataChange = (sectionTitle, sectionDataUpdater) => {
@@ -747,6 +814,14 @@ function App() {
                         <Observations onObservationsChange={handleObservationsChange} initialData={generalObservations} />
                         <PhotoCapture onPhotosChange={handlePhotosChange} initialData={photos} />
                         <Box sx={{ mt: 3, pb: 4, display: 'flex', justifyContent: 'center', gap: 2 }}>
+                            <Button 
+                                variant="outlined" 
+                                onClick={saveCurrentForm} 
+                                sx={{ padding: '10px 30px', fontSize: '1.1rem' }}
+                                disabled={!formChanged}
+                            >
+                                💾 Guardar Localmente
+                            </Button>
                             <Button variant="contained" onClick={() => { if (formChanged) saveCurrentForm(); generatePdf(); }} sx={{ padding: '10px 30px', fontSize: '1.1rem' }} disabled={!currentFormId}>Finalizar y Generar PDF</Button>
                             <Button variant="outlined" onClick={saveCurrentForm} sx={{ padding: '10px 30px', fontSize: '1.1rem' }} disabled={!formChanged}>Guardar Localmente</Button>
                         </Box>
