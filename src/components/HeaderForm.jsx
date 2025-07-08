@@ -110,11 +110,19 @@ const HeaderForm = ({ onDataChange, initialData = {}, onTipoEspacioChange }) => 
         const clearedData = {
             fechaVisita: currentDate,
             horaVisita: currentTime
+            // 🔧 NO incluir tipoEspacio para que se resetee completamente
         };
 
         setFormData(clearedData);
-        setContratistaSeleccionado(''); // Resetear el contratista seleccionado
+        setContratistaSeleccionado('');
         localStorage.setItem('headerData', JSON.stringify(clearedData));
+        
+        // 🔧 NOTIFICAR al padre que debe resetear TODO
+        if (onTipoEspacioChange) {
+            onTipoEspacioChange(''); // Esto limpiará el checklist
+        }
+        
+        console.log('🧹 HeaderForm: Formulario limpiado y notificado al padre');
     };
 
     return (

@@ -7,14 +7,19 @@ const ChecklistItem = ({ id, number, label, onChange, initialData = {} }) => {
 
     // Cuando cambia el valor seleccionado, actualiza los datos y notifica al padre
     useEffect(() => {
-        const newData = {
-            value: selectedValue,
-            displayText: displayText,
-            label: label
-        };
+        // 🔧 DEBOUNCE: Solo actualizar después de 50ms sin cambios para evitar loops infinitos
+        const timeoutId = setTimeout(() => {
+            const newData = {
+                value: selectedValue,
+                displayText: displayText,
+                label: label
+            };
+            
+            onChange(id, newData);
+        }, 50); // Debounce de 50ms
         
-        onChange(id, newData);
-    }, [selectedValue, displayText, id, onChange, label]);
+        return () => clearTimeout(timeoutId);
+    }, [selectedValue, displayText, id, label]); // ✅ Removido onChange de dependencias
 
     // Actualiza el texto de visualización cuando cambia el valor seleccionado
     useEffect(() => {

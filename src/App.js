@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+giimport React, { useState, useEffect, useCallback } from 'react';
 import { ThemeProvider } from '@mui/material/styles';
 import { Container, Box, Button, Snackbar, Alert, Typography, Tab, Tabs, Paper, Grid } from '@mui/material';
 import jsPDF from 'jspdf';
@@ -145,11 +145,34 @@ function App() {
         cleanupOldForms();
     }, []);
 
-    // 🔧 MEJORA PRINCIPAL: Autoguardado completamente independiente de autenticación
+    // 🔧 DESHABILITADO: Autoguardado automático para mejorar performance en campo
+    /*
+    // 🔧 DESHABILITADO: Autoguardado automático para mejorar performance en campo
+    /*
     useEffect(() => {
         if (formChanged) { // 🎯 SIN dependencia de 'user'
-            console.log('⏱️ App: Iniciando timer de autoguardado (3 segundos)');
+            // 🔍 DEBUG: Incrementar contador de renders
+            renderCountRef.current += 1;
+            lastChangeTimeRef.current = Date.now();
+            
+            console.log('🔍 RENDER CYCLES:', {
+                renderCount: renderCountRef.current,
+                formChanged,
+                checklistKeys: Object.keys(checklistSectionsData),
+                observationsLength: generalObservations?.length,
+                lastObservationChar: generalObservations?.slice(-1),
+                timestamp: new Date().toISOString()
+            });
+            
+            console.log('⏱️ App: Iniciando timer de autoguardado (5 segundos con debounce)');
             const autoSaveTimer = setTimeout(() => {
+                // 🔧 DEBOUNCE: Solo guardar si no hay cambios recientes (2 segundos)
+                const timeSinceLastChange = Date.now() - lastChangeTimeRef.current;
+                if (timeSinceLastChange < 2000) {
+                    console.log('⏭️ App: Saltando autoguardado, cambios muy recientes');
+                    return;
+                }
+                
                 try {
                     const formData = {
                         headerData, 
@@ -168,7 +191,8 @@ function App() {
                         observationsLength: generalObservations?.length || 0,
                         checklistSections: Object.keys(checklistSectionsData),
                         photosCount: photos.length,
-                        observationsContent: generalObservations
+                        observationsContent: generalObservations,
+                        renderCount: renderCountRef.current
                     });
                     
                     const savedId = saveFormToLocalStorage(formData, currentFormId);
@@ -180,7 +204,7 @@ function App() {
                 } catch (error) {
                     console.error('❌ App: Error en autoguardado local:', error);
                 }
-            }, 3000); // 🔧 MEJORA: Reducido a 3 segundos para guardado más frecuente
+            }, 5000); // 🔧 MEJORA: Aumentado a 5 segundos
             
             return () => {
                 console.log('🔄 App: Cancelando timer de autoguardado');
@@ -188,8 +212,10 @@ function App() {
             };
         }
     }, [headerData, signatures, generalObservations, checklistSectionsData, photos, geoLocation, tipoEspacio, puntuacionTotal, formChanged, currentFormId]); // 🎯 SIN 'user'
+    */
 
-    // 🔧 MEJORA: Guardado de emergencia al perder foco de ventana
+    // 🔧 DESHABILITADO: Guardado de emergencia al perder foco de ventana para mejorar performance
+    /*
     useEffect(() => {
         const handleBeforeUnload = () => {
             if (formChanged) {
@@ -223,8 +249,9 @@ function App() {
             document.removeEventListener('visibilitychange', handleVisibilityChange);
         };
     }, [formChanged, headerData, signatures, generalObservations, checklistSectionsData, photos, geoLocation, tipoEspacio, puntuacionTotal, currentFormId]);
+    */
 
-    // Efecto para registrar cambios en los datos
+    // 🔧 SIMPLIFICADO: Detección de cambios sin loops infinitos
     useEffect(() => {
         const hasHeaderData = Object.keys(headerData).length > 2;
         const hasObservations = generalObservations && generalObservations.trim().length > 0;
@@ -233,23 +260,12 @@ function App() {
         const hasSignatures = Object.keys(signatures).some(k => signatures[k].data);
         const hasGeoLocation = Object.keys(geoLocation).length > 0;
         
-        console.log('🔍 App: Detectando cambios:', {
-            currentFormId: !!currentFormId,
-            hasHeaderData,
-            hasObservations,
-            hasChecklistData,
-            hasPhotos,
-            hasSignatures,
-            hasGeoLocation,
-            observationsLength: generalObservations?.length || 0,
-            checklistSections: Object.keys(checklistSectionsData).length
-        });
-        
-        if (currentFormId || hasHeaderData || hasObservations || hasChecklistData || hasPhotos || hasSignatures || hasGeoLocation) {
-            console.log('✅ App: Marcando formulario como cambiado');
+        // � SIMPLIFICADO: Solo marcar como cambiado si realmente hay datos y no está ya marcado
+        const hasData = hasHeaderData || hasObservations || hasChecklistData || hasPhotos || hasSignatures || hasGeoLocation;
+        if (hasData && !formChanged) {
             setFormChanged(true);
         }
-    }, [headerData, signatures, generalObservations, checklistSectionsData, photos, geoLocation, currentFormId]);
+    }, [headerData, signatures, generalObservations, checklistSectionsData, photos, geoLocation, formChanged]); // Removido currentFormId
 
     // Efecto para manejar cambios en el tipo de espacio
     useEffect(() => {
@@ -309,9 +325,8 @@ function App() {
 
     // 🔧 MEJORA: Función de guardado local que siempre funciona
     const saveCurrentForm = () => {
-        console.log('💾 App: Iniciando guardado manual, formChanged:', formChanged);
         if (!formChanged) {
-            console.log('⚠️ App: No hay cambios para guardar');
+            setNotification({ open: true, message: 'No hay cambios para guardar', severity: 'info' });
             return;
         }
         
@@ -322,19 +337,10 @@ function App() {
                 lastUpdated: new Date().toISOString()
             };
             
-            console.log('💾 App: Guardando manualmente con datos:', {
-                headerKeys: Object.keys(headerData),
-                observationsLength: generalObservations?.length || 0,
-                checklistSections: Object.keys(checklistSectionsData),
-                photosCount: photos.length,
-                observationsContent: generalObservations
-            });
-            
             const savedId = saveFormToLocalStorage(formData, currentFormId);
             if (savedId && currentFormId !== savedId) setCurrentFormId(savedId);
             setNotification({ open: true, message: 'Cambios guardados localmente', severity: 'success' });
             setFormChanged(false);
-            console.log("✅ App: Guardado local manual completado exitosamente, ID:", savedId);
         } catch (error) {
             console.error("❌ App: Error en guardado local manual:", error);
             setNotification({ open: true, message: 'Error al guardar localmente', severity: 'error' });
@@ -390,19 +396,35 @@ function App() {
         const now = new Date();
         const currentDate = now.toISOString().split('T')[0];
         const currentTime = now.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', hour12: false });
+        
+        console.log('🧹 Iniciando reseteo completo del formulario');
+        
+        // 🔧 RESETEO COMPLETO: Limpiar todos los estados
         setHeaderData({ fechaVisita: currentDate, horaVisita: currentTime });
         setSignatures({
             'apoyo a la supervisión quien realiza la visita': { data: '', checked: false },
             'profesional/técnico del contratista quien atiende la visita': { data: '', checked: false },
         });
         setGeneralObservations('');
-        setChecklistSectionsData({});
+        setChecklistSectionsData({}); 
         setPhotos([]);
         setGeoLocation({});
-        setTipoEspacio('');
+        
+        // 🎯 CLAVE: Resetear tipo de espacio PRIMERO
+        setTipoEspacio(''); 
+        
         setPuntuacionTotal({ total: 0, promedio: 0, completado: 0, maxPuntosPosibles: 0, porcentajeCumplimiento: 0 });
         setCurrentFormId(null);
         setFormChanged(false);
+        
+        // 🔧 FORZAR RE-RENDER COMPLETO: Resetear checklist items
+        setChecklistItems(getChecklistData('')); // Pasar string vacío para limpiar
+        
+        // 🔧 FORZAR RE-RENDER: Usar setTimeout para asegurar que el estado se actualice
+        setTimeout(() => {
+            setChecklistItems(getChecklistData());
+            console.log('🧹 Formulario reseteado completamente con re-render forzado');
+        }, 100);
     };
 
     const handleCloseNotification = () => setNotification({ ...notification, open: false });
@@ -412,18 +434,20 @@ function App() {
         const normalizedRole = role.toLowerCase();
         setSignatures(prev => ({ ...prev, [normalizedRole]: { data: signatureData, checked } }));
     };
-    const handleObservationsChange = (observations) => {
-        console.log('🔄 App: Recibiendo cambio de observaciones:', observations);
+    const handleObservationsChange = useCallback((observations) => {
         setGeneralObservations(observations);
-    };
-    const handlePhotosChange = (newPhotos) => setPhotos(newPhotos);
-    const handleGeoLocationChange = (location) => setGeoLocation(location);
-    const handleSectionDataChange = (sectionTitle, sectionDataUpdater) => {
+    }, []);
+    
+    const handlePhotosChange = useCallback((newPhotos) => setPhotos(newPhotos), []);
+    
+    const handleGeoLocationChange = useCallback((location) => setGeoLocation(location), []);
+    
+    const handleSectionDataChange = useCallback((sectionTitle, sectionDataUpdater) => {
         setChecklistSectionsData(prevState => ({
             ...prevState,
             [sectionTitle]: sectionDataUpdater(prevState[sectionTitle] || {})
         }));
-    };
+    }, []);
 
     const generateTableData = () => {
         const tableRows = [];
@@ -807,22 +831,45 @@ function App() {
                         )}
                         <GeoLocationCapture onLocationChange={handleGeoLocationChange} initialData={geoLocation} />
                         {checklistItems.map((section) => (
-                            <ChecklistSection key={section.title} title={section.title} items={section.items} onSectionDataChange={handleSectionDataChange} initialData={checklistSectionsData[section.title]} />
+                            <ChecklistSection 
+                                key={`${section.title}-${tipoEspacio}-${currentFormId || 'new'}`} 
+                                title={section.title} 
+                                items={section.items} 
+                                onSectionDataChange={handleSectionDataChange} 
+                                initialData={checklistSectionsData[section.title]} 
+                            />
                         ))}
-                        <SignatureCapture label="apoyo a la supervisión quien realiza la visita" onSignatureChange={handleSignatureChange} initialData={signatures['apoyo a la supervisión quien realiza la visita']} />
-                        <SignatureCapture label="profesional/técnico del contratista quien atiende la visita" onSignatureChange={handleSignatureChange} initialData={signatures['profesional/técnico del contratista quien atiende la visita']} />
-                        <Observations onObservationsChange={handleObservationsChange} initialData={generalObservations} />
-                        <PhotoCapture onPhotosChange={handlePhotosChange} initialData={photos} />
+                        <SignatureCapture 
+                            key={`signature-apoyo-${currentFormId || 'new'}`}
+                            label="apoyo a la supervisión quien realiza la visita" 
+                            onSignatureChange={handleSignatureChange} 
+                            initialData={signatures['apoyo a la supervisión quien realiza la visita']} 
+                        />
+                        <SignatureCapture 
+                            key={`signature-profesional-${currentFormId || 'new'}`}
+                            label="profesional/técnico del contratista quien atiende la visita" 
+                            onSignatureChange={handleSignatureChange} 
+                            initialData={signatures['profesional/técnico del contratista quien atiende la visita']} 
+                        />
+                        <Observations 
+                            key={`observations-${currentFormId || 'new'}`}
+                            onObservationsChange={handleObservationsChange} 
+                            initialData={generalObservations} 
+                        />
+                        <PhotoCapture 
+                            key={`photos-${currentFormId || 'new'}`}
+                            onPhotosChange={handlePhotosChange} 
+                            initialData={photos} 
+                        />
                         <Box sx={{ mt: 3, pb: 4, display: 'flex', justifyContent: 'center', gap: 2 }}>
                             <Button 
-                                variant="outlined" 
-                                onClick={saveCurrentForm} 
-                                sx={{ padding: '10px 30px', fontSize: '1.1rem' }}
-                                disabled={!formChanged}
+                                variant="contained" 
+                                onClick={() => { if (formChanged) saveCurrentForm(); generatePdf(); }} 
+                                sx={{ padding: '10px 30px', fontSize: '1.1rem' }} 
+                                disabled={!currentFormId}
                             >
-                                💾 Guardar Localmente
+                                Finalizar y Generar PDF
                             </Button>
-                            <Button variant="contained" onClick={() => { if (formChanged) saveCurrentForm(); generatePdf(); }} sx={{ padding: '10px 30px', fontSize: '1.1rem' }} disabled={!currentFormId}>Finalizar y Generar PDF</Button>
                             <Button variant="outlined" onClick={saveCurrentForm} sx={{ padding: '10px 30px', fontSize: '1.1rem' }} disabled={!formChanged}>Guardar Localmente</Button>
                         </Box>
                     </Box>

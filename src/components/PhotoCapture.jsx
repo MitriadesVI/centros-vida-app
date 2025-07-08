@@ -42,7 +42,7 @@ const PhotoCapture = ({ onPhotosChange, initialData = [] }) => {
   // Notificar al padre cuando cambien las fotos
   useEffect(() => {
     onPhotosChange(photos);
-  }, [photos, onPhotosChange]);
+  }, [photos]); // ✅ Removido onPhotosChange de dependencias
   
   // Convertir archivo a base64 para garantizar disponibilidad en PDF
   const convertFileToBase64 = (file) => {

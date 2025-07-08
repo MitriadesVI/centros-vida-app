@@ -1,28 +1,20 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import '../styles/forms.css';
 
 const Observations = ({ onObservationsChange, initialData = '' }) => {
     const [observations, setObservations] = useState(initialData);
 
-    // Inicializar con datos iniciales si los hay
+    // Inicializar con datos iniciales SOLO cuando initialData cambie
     useEffect(() => {
-        if (initialData && initialData !== observations) {
-            setObservations(initialData);
-            console.log('📝 Observations: Datos iniciales cargados:', initialData);
-        }
-    }, [initialData, observations]);
+        setObservations(initialData);
+    }, [initialData]);
 
-    useEffect(() => {
-        // Notificar al componente padre cuando las observaciones cambien
-        onObservationsChange(observations);
-        console.log('📝 Observations: Cambio detectado, notificando al padre:', observations);
-    }, [observations, onObservationsChange]);
-
-    const handleChange = (e) => {
+    const handleChange = useCallback((e) => {
         const newValue = e.target.value;
         setObservations(newValue);
-        console.log('📝 Observations: Usuario escribió:', newValue);
-    };
+        // Notificar inmediatamente al padre para evitar useEffect adicional
+        onObservationsChange(newValue);
+    }, [onObservationsChange]);
 
     return (
         <div className="form-container">

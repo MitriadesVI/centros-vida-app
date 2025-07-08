@@ -13,15 +13,20 @@ const ChecklistSection = ({ title, items, onSectionDataChange, initialData = {} 
         maxPuntos: items.length * 100 // Puntos máximos posibles (100 por ítem)
     });
 
-    // Notificar al padre cuando cambian los datos de la sección
+    // Notificar al padre cuando cambian los datos de la sección - CON DEBOUNCE
     useEffect(() => {
-        onSectionDataChange(title, (prevSectionData) => ({
-            ...prevSectionData,
-            ...sectionData,
-            // Incluir información de puntuación en los datos
-            puntuacion: puntuacion
-        }));
-    }, [sectionData, puntuacion, title, onSectionDataChange]);
+        // � DEBOUNCE: Solo actualizar después de 100ms sin cambios para evitar loops infinitos
+        const timeoutId = setTimeout(() => {
+            onSectionDataChange(title, (prevSectionData) => ({
+                ...prevSectionData,
+                ...sectionData,
+                // Incluir información de puntuación en los datos
+                puntuacion: puntuacion
+            }));
+        }, 100);
+        
+        return () => clearTimeout(timeoutId);
+    }, [sectionData, puntuacion, title]); // ✅ Con debounce para evitar loops
 
     // Calcular puntuación cuando cambian los datos
     useEffect(() => {
