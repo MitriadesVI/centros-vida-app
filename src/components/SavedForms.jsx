@@ -18,9 +18,9 @@ import {
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
-import UploadIcon from '@mui/icons-material/Upload';
 
-import { getAllSavedForms, deleteForm } from '../services/localStorageService';
+// << 1. IMPORTACIONES ACTUALIZADAS
+import { getAllForms, deleteForm } from '../services/dbService';
 
 /**
  * Componente para gestionar formularios guardados localmente
@@ -30,15 +30,16 @@ const SavedForms = ({ onLoadForm }) => {
   const [savedForms, setSavedForms] = useState([]);
   const [openDialog, setOpenDialog] = useState(false);
   const [selectedForm, setSelectedForm] = useState(null);
-  const [storageInfo, setStorageInfo] = useState(null);
+  const [storageInfo, setStorageInfo] = useState(null); // Este estado se puede mantener para futuras métricas
 
   // Cargar la lista de formularios guardados
   useEffect(() => {
     loadSavedForms();
   }, []);
 
-  const loadSavedForms = () => {
-    const forms = getAllSavedForms();
+  // << 2. FUNCIÓN DE CARGA AHORA ES ASYNC
+  const loadSavedForms = async () => {
+    const forms = await getAllForms();
     setSavedForms(forms);
   };
 
@@ -55,10 +56,10 @@ const SavedForms = ({ onLoadForm }) => {
     setOpenDialog(true);
   };
 
-  // Eliminar formulario
-  const handleDeleteForm = () => {
+  // << 3. FUNCIÓN DE ELIMINACIÓN AHORA ES ASYNC
+  const handleDeleteForm = async () => {
     if (selectedForm) {
-      deleteForm(selectedForm.id);
+      await deleteForm(selectedForm.id);
       loadSavedForms(); // Recargar la lista
       setOpenDialog(false);
       setSelectedForm(null);
@@ -72,14 +73,14 @@ const SavedForms = ({ onLoadForm }) => {
     }
   };
 
-  // Obtener etiqueta de estado
+  // << 4. ETIQUETA DE ESTADO AHORA LEE DE form.status
   const getStatusLabel = (status) => {
     switch (status) {
-      case 'draft':
+      case 'borrador':
         return 'Borrador';
-      case 'complete':
-        return 'Completado';
-      case 'synced':
+      case 'finalizado':
+        return 'Finalizado (Pendiente de Sincronizar)';
+      case 'sincronizado':
         return 'Sincronizado';
       default:
         return 'Desconocido';
@@ -93,7 +94,7 @@ const SavedForms = ({ onLoadForm }) => {
         No hay formularios guardados.
       </Typography>
       <Typography variant="body2" color="textSecondary" sx={{ mt: 1 }}>
-        Los formularios se guardarán automáticamente mientras trabajas.
+        Los borradores que guardes aparecerán aquí.
       </Typography>
     </Box>
   );
@@ -111,7 +112,7 @@ const SavedForms = ({ onLoadForm }) => {
               <React.Fragment key={form.id}>
                 <ListItem>
                   <ListItemText
-                    primary={`Visita: ${form.numeroVisita || 'Sin número'} - ${form.lugar || 'Sin ubicación'}`}
+                    primary={`Visita: ${form.headerData?.espacioAtencion || 'Sin ubicación'}`}
                     secondary={
                       <>
                         <Typography component="span" variant="body2" color="textPrimary">
@@ -151,11 +152,10 @@ const SavedForms = ({ onLoadForm }) => {
         )}
       </Paper>
 
-      {/* Alerta de espacio de almacenamiento si está casi lleno */}
+      {/* Alerta de espacio de almacenamiento si está casi lleno (lógica a futuro) */}
       {storageInfo && storageInfo.usedPercentage > 70 && (
         <Alert severity="warning" sx={{ mb: 2 }}>
-          El almacenamiento local está al {Math.round(storageInfo.usedPercentage)}% de capacidad. 
-          Considere sincronizar y eliminar formularios antiguos.
+          El almacenamiento local está casi lleno. Considere sincronizar y eliminar formularios antiguos.
         </Alert>
       )}
 
@@ -179,11 +179,11 @@ const SavedForms = ({ onLoadForm }) => {
         <DialogTitle>Confirmar eliminación</DialogTitle>
         <DialogContent>
           <Typography>
-            ¿Está seguro de que desea eliminar este formulario? Esta acción no se puede deshacer.
+            ¿Está seguro de que desea eliminar este borrador? Esta acción no se puede deshacer.
           </Typography>
           {selectedForm && (
             <Typography variant="body2" sx={{ mt: 2 }}>
-              Visita: {selectedForm.numeroVisita || 'Sin número'} - {selectedForm.lugar || 'Sin ubicación'}
+              Visita: {selectedForm.headerData?.espacioAtencion || 'Sin ubicación'}
             </Typography>
           )}
         </DialogContent>

@@ -28,12 +28,23 @@ import { getChecklistData, getMaxPuntosPosibles } from './data';
 import theme from './theme';
 import './components/ChecklistItem.css';
 
+// Nuevos servicios de base de datos IndexedDB
 import {
-    saveFormToLocalStorage,
-    getFormFromLocalStorage,
-    markFormAsComplete,
-    cleanupOldForms
-} from './services/localStorageService';
+    saveFormAsDraft,
+    getForm,
+    finalizeForm,
+    saveUserSession,    // << AÑADIR
+    getUserSession,     // << AÑADIR
+    clearUserSession    // << AÑADIR
+} from './services/dbService'; // << NUEVA IMPORTACIÓN
+
+// Ya no necesitamos estos del localStorageService - comentados para referencia
+// import {
+//     saveFormToLocalStorage,
+//     getFormFromLocalStorage,
+//     markFormAsComplete,
+//     cleanupOldForms
+// } from './services/localStorageService';
 
 function App() {
     // Estado para controlar el modo de visualización
@@ -65,6 +76,7 @@ function App() {
     });
     const [currentFormId, setCurrentFormId] = useState(null);
     const [formChanged, setFormChanged] = useState(false);
+    const [currentFormLastUpdated, setCurrentFormLastUpdated] = useState(null); // << Nuevo estado para trackear última actualización
     const [notification, setNotification] = useState({
         open: false,
         message: '',
@@ -72,78 +84,67 @@ function App() {
     });
 
     // 🔧 MEJORA: Estado para manejar verificaciones de sesión sin perder datos
-    const [authVerifying, setAuthVerifying] = useState(false);
+    // const [authVerifying, setAuthVerifying] = useState(false); // Ya no necesario con arranque instantáneo
 
-    // 🔧 MEJORA: useEffect para autenticación más robusto
+    // 🔧 NUEVA IMPLEMENTACIÓN: Arranque instantáneo con sesión local + Firebase en paralelo
     useEffect(() => {
-        let authTimeout;
-        
-        const unsubscribe = onAuthChange(async (firebaseUser) => {
-            setAuthVerifying(true);
-            
-            // 🔧 MEJORA: Debounce para evitar verificaciones múltiples rápidas
-            clearTimeout(authTimeout);
-            authTimeout = setTimeout(async () => {
-                try {
-                    if (firebaseUser) {
-                        const role = await getUserRole(firebaseUser.uid);
-                        
-                        if (!role) {
-                            console.log("Usuario no autorizado, cerrando sesión...");
-                            await logout();
-                            setUser(null);
-                            setUserRole(null);
-                            setNotification({
-                                open: true,
-                                message: 'Acceso denegado. Contacte al administrador.',
-                                severity: 'error'
-                            });
-                        } else {
-                            // 🔧 MEJORA: Solo actualizar usuario si realmente cambió
-                            if (!user || user.uid !== firebaseUser.uid) {
-                                setUser(firebaseUser);
-                                setUserRole(role);
-                                await updateLastLogin(firebaseUser.uid);
-                            }
-                        }
-                    } else {
-                        // 🔧 MEJORA: Solo resetear usuario si realmente no hay usuario
-                        // (evita resets durante verificaciones temporales)
-                        if (user) {
-                            setUser(null);
-                            setUserRole(null);
-                        }
-                    }
-                } catch (error) {
-                    console.error("Error al verificar autorización:", error);
-                    // 🔧 MEJORA: No cerrar sesión por errores de red temporales
-                    if (error.code !== 'unavailable' && error.code !== 'deadline-exceeded') {
+        const initializeApp = async () => {
+            // 1. Intentamos obtener una sesión local primero
+            const localSession = await getUserSession();
+
+            if (localSession) {
+                // 2. Si existe una sesión local, cargamos la app INMEDIATAMENTE
+                console.log('🚀 Usando sesión local para arranque instantáneo.');
+                setUser({ uid: localSession.uid, email: localSession.email });
+                setUserRole(localSession.role);
+                setAuthChecked(true); // ¡La app ya no espera!
+            }
+
+            // 3. En paralelo (o si no hay sesión local), nos suscribimos a Firebase
+            // para actualizar el estado o manejar el primer login.
+            const unsubscribe = onAuthChange(async (firebaseUser) => {
+                if (firebaseUser) {
+                    // Si hay un usuario de Firebase, refrescamos los datos por si han cambiado
+                    const role = await getUserRole(firebaseUser.uid);
+                    if (!role) {
                         await logout();
+                        await clearUserSession();
                         setUser(null);
                         setUserRole(null);
-                        setNotification({ 
+                        setNotification({
                             open: true,
-                            message: 'Error al verificar autorización. Sesión cerrada.',
+                            message: 'Acceso denegado. Contacte al administrador.',
                             severity: 'error'
                         });
+                    } else {
+                        setUser(firebaseUser);
+                        setUserRole(role);
+                        // Aseguramos que la sesión local esté siempre actualizada
+                        await saveUserSession({ uid: firebaseUser.uid, email: firebaseUser.email, role });
                     }
-                } finally {
-                    setAuthChecked(true);
-                    setAuthVerifying(false);
+                } else {
+                    // Si no hay usuario en Firebase (sesión expirada, etc.), limpiamos todo.
+                    await clearUserSession();
+                    setUser(null);
+                    setUserRole(null);
                 }
-            }, 500); // 500ms de debounce
-        });
 
-        return () => {
-            unsubscribe();
-            clearTimeout(authTimeout);
+                // Si no teníamos sesión local, marcamos la app como lista ahora
+                if (!localSession) {
+                    setAuthChecked(true);
+                }
+            });
+
+            return () => unsubscribe();
         };
-    }, []); // 🔧 MEJORA: Removido 'user' de dependencias para evitar loops
 
-    // Limpiar formularios antiguos al inicio
-    useEffect(() => {
-        cleanupOldForms();
-    }, []);
+        initializeApp();
+    }, []); // Se ejecuta solo una vez al montar el componente
+
+    // Ya no necesitamos limpiar formularios antiguos porque IndexedDB maneja esto automáticamente
+    // useEffect(() => {
+    //     cleanupOldForms();
+    // }, []);
 
     // 🔧 DESHABILITADO: Autoguardado automático para mejorar performance en campo
     /*
@@ -315,6 +316,10 @@ function App() {
           setUser(loggedInUser);
           setUserRole(role);
           await updateLastLogin(loggedInUser.uid); // Usa updateLastLogin de userRoleService
+
+          // << AÑADIR ESTA LÍNEA: Guardar sesión local para arranque instantáneo >>
+          await saveUserSession({ uid: loggedInUser.uid, email: loggedInUser.email, role });
+
           setViewMode('form');
         }
       } catch (error) {
@@ -329,8 +334,8 @@ function App() {
       }
     };
 
-    // 🔧 MEJORA: Función de guardado local que siempre funciona
-    const saveCurrentForm = () => {
+    // 🔧 MEJORA: Función de guardado local que siempre funciona - ACTUALIZADA PARA INDEXEDDB
+    const saveCurrentForm = async () => {
         if (!formChanged) {
             setNotification({ open: true, message: 'No hay cambios para guardar', severity: 'info' });
             return;
@@ -339,21 +344,22 @@ function App() {
         try {
             const formData = {
                 headerData, signatures, generalObservations, checklistSectionsData,
-                photos, geoLocation, tipoEspacio, puntuacionTotal,
-                lastUpdated: new Date().toISOString()
+                photos, geoLocation, tipoEspacio, puntuacionTotal
             };
             
-            const savedId = saveFormToLocalStorage(formData, currentFormId);
+            // << CAMBIO PRINCIPAL: Ahora usamos saveFormAsDraft de IndexedDB
+            const savedId = await saveFormAsDraft(formData, currentFormId);
             if (savedId && currentFormId !== savedId) setCurrentFormId(savedId);
-            setNotification({ open: true, message: 'Cambios guardados localmente', severity: 'success' });
+            setCurrentFormLastUpdated(new Date().toISOString()); // << Actualizar timestamp
+            setNotification({ open: true, message: 'Borrador guardado localmente', severity: 'success' });
             setFormChanged(false);
         } catch (error) {
             console.error("❌ App: Error en guardado local manual:", error);
-            setNotification({ open: true, message: 'Error al guardar localmente', severity: 'error' });
+            setNotification({ open: true, message: 'Error al guardar el borrador', severity: 'error' });
         }
     };
 
-    const loadSavedForm = (formId) => {
+    const loadSavedForm = async (formId) => { // << AHORA ES ASYNC
         console.log('📂 App: Intentando cargar formulario:', formId);
         if (!formId) { 
             console.log('📂 App: No hay formId, reseteando formulario');
@@ -362,31 +368,33 @@ function App() {
             return; 
         }
         
-        const savedForm = getFormFromLocalStorage(formId);
-        console.log('📂 App: Formulario recuperado del localStorage:', savedForm);
+        // << CAMBIO PRINCIPAL: Ahora usamos getForm de IndexedDB
+        const savedForm = await getForm(formId);
+        console.log('📂 App: Formulario recuperado de IndexedDB:', savedForm);
         
-        if (savedForm && savedForm.data) {
-            const { data } = savedForm;
+        if (savedForm) {
+            // La estructura de datos es directa ahora, no hay wrapper 'data'
             console.log('📂 App: Cargando datos del formulario:', {
-                headerKeys: Object.keys(data.headerData || {}),
-                observationsLength: data.generalObservations?.length || 0,
-                checklistSections: Object.keys(data.checklistSectionsData || {}),
-                photosCount: data.photos?.length || 0,
-                observationsContent: data.generalObservations
+                headerKeys: Object.keys(savedForm.headerData || {}),
+                observationsLength: savedForm.generalObservations?.length || 0,
+                checklistSections: Object.keys(savedForm.checklistSectionsData || {}),
+                photosCount: savedForm.photos?.length || 0,
+                observationsContent: savedForm.generalObservations
             });
             
-            setHeaderData(data.headerData || {});
-            setSignatures(data.signatures || {
+            setHeaderData(savedForm.headerData || {});
+            setSignatures(savedForm.signatures || {
                 'apoyo a la supervisión quien realiza la visita': { data: '', checked: false },
                 'profesional/técnico del contratista quien atiende la visita': { data: '', checked: false },
             });
-            setGeneralObservations(data.generalObservations || '');
-            setChecklistSectionsData(data.checklistSectionsData || {});
-            setPhotos(data.photos || []);
-            setGeoLocation(data.geoLocation || {});
-            setTipoEspacio(data.tipoEspacio || '');
-            setPuntuacionTotal(data.puntuacionTotal || { total: 0, promedio: 0, completado: 0, maxPuntosPosibles: 0, porcentajeCumplimiento: 0 });
+            setGeneralObservations(savedForm.generalObservations || '');
+            setChecklistSectionsData(savedForm.checklistSectionsData || {});
+            setPhotos(savedForm.photos || []);
+            setGeoLocation(savedForm.geoLocation || {});
+            setTipoEspacio(savedForm.tipoEspacio || '');
+            setPuntuacionTotal(savedForm.puntuacionTotal || { total: 0, promedio: 0, completado: 0, maxPuntosPosibles: 0, porcentajeCumplimiento: 0 });
             setCurrentFormId(formId);
+            setCurrentFormLastUpdated(savedForm.lastUpdated); // << Actualizar timestamp desde el formulario cargado
             setFormChanged(false);
             setViewMode('form');
             setNotification({ open: true, message: 'Formulario cargado correctamente', severity: 'success' });
@@ -421,6 +429,7 @@ function App() {
         
         setPuntuacionTotal({ total: 0, promedio: 0, completado: 0, maxPuntosPosibles: 0, porcentajeCumplimiento: 0 });
         setCurrentFormId(null);
+        setCurrentFormLastUpdated(null); // << Limpiar timestamp al resetear
         setFormChanged(false);
         
         // 🔧 FORZAR RE-RENDER COMPLETO: Resetear checklist items
@@ -490,7 +499,8 @@ function App() {
             return;
         }
         
-        markFormAsComplete(currentFormId);
+        // << CAMBIO CLAVE: AHORA MARCAMOS EL FORMULARIO COMO FINALIZADO EN INDEXEDDB
+        await finalizeForm(currentFormId);
         
         // 🔧 MEJORA: Solo sincronizar con Firebase si hay usuario autenticado
         if (user) {
@@ -650,14 +660,14 @@ function App() {
         }
     };
 
-    // 🔧 MEJORA: Pantalla de carga que no interfiere con el estado del formulario
-    if (!authChecked || authVerifying) {
+    // 🔧 MEJORA: Pantalla de carga simplificada (arranque instantáneo con sesión local)
+    if (!authChecked) {
         return (
             <ThemeProvider theme={theme}>
                 <Container maxWidth="sm" sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
                     <Box sx={{ textAlign: 'center' }}>
                         <Typography variant="h6" gutterBottom>
-                            {authVerifying ? 'Verificando sesión...' : 'Iniciando aplicación...'}
+                            Iniciando aplicación...
                         </Typography>
                         <Typography variant="body2" color="text.secondary">
                             {formChanged ? 'Tus datos están seguros en el almacenamiento local' : 'Cargando...'}
@@ -767,6 +777,9 @@ function App() {
                                             if (formChanged) {
                                                 saveCurrentForm();
                                             }
+
+                                            // << AÑADIR ESTA LÍNEA: Limpiar sesión local >>
+                                            await clearUserSession();
                                             
                                             await logout();
                                             setUser(null);
@@ -811,7 +824,7 @@ function App() {
                         
                         {currentFormId && 
                             <Typography variant="caption" color="textSecondary" display="block">
-                                Última act. local: { getFormFromLocalStorage(currentFormId)?.data.lastUpdated ? new Date(getFormFromLocalStorage(currentFormId).data.lastUpdated).toLocaleString() : 'N/A'}
+                                Última act. local: {currentFormLastUpdated ? new Date(currentFormLastUpdated).toLocaleString() : 'N/A'}
                             </Typography>
                         }
                     </Box>
