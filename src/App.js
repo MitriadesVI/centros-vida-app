@@ -260,19 +260,24 @@ function App() {
         const hasSignatures = Object.keys(signatures).some(k => signatures[k].data);
         const hasGeoLocation = Object.keys(geoLocation).length > 0;
         
-        // � SIMPLIFICADO: Solo marcar como cambiado si realmente hay datos y no está ya marcado
+        //  SIMPLIFICADO: Solo marcar como cambiado si realmente hay datos y no está ya marcado
         const hasData = hasHeaderData || hasObservations || hasChecklistData || hasPhotos || hasSignatures || hasGeoLocation;
         if (hasData && !formChanged) {
             setFormChanged(true);
         }
     }, [headerData, signatures, generalObservations, checklistSectionsData, photos, geoLocation, formChanged]); // Removido currentFormId
 
-    // Efecto para manejar cambios en el tipo de espacio
+    // Efecto para manejar cambios en el tipo de espacio y contratista
     useEffect(() => {
-        const newChecklist = getChecklistData(tipoEspacio);
+        // Ahora pasamos también el nombre del contratista desde headerData
+        const newChecklist = getChecklistData(tipoEspacio, headerData.entidadContratista); // << MODIFICADO
         setChecklistItems(newChecklist);
-        setChecklistSectionsData({});
-    }, [tipoEspacio]);
+        
+        // Reseteamos los datos del checklist si el tipo de espacio o el contratista cambian
+        if (tipoEspacio || headerData.entidadContratista) {
+            setChecklistSectionsData({});
+        }
+    }, [tipoEspacio, headerData.entidadContratista]); // << MODIFICADO
 
     // Efecto para calcular la puntuación total
     useEffect(() => {
@@ -286,11 +291,12 @@ function App() {
             }
         });
         const promedio = itemsRespondidos > 0 ? Math.round(totalPuntos / itemsRespondidos) : 0;
-        const maxPuntosPosibles = getMaxPuntosPosibles(tipoEspacio);
+        // Ahora pasamos también el nombre del contratista desde headerData
+        const maxPuntosPosibles = getMaxPuntosPosibles(tipoEspacio, headerData.entidadContratista); // << MODIFICADO
         const porcentajeCumplimiento = maxPuntosPosibles > 0 ? Math.round((totalPuntos / maxPuntosPosibles) * 100) : 0;
         const completado = totalItemsCalculado > 0 ? Math.round((itemsRespondidos / totalItemsCalculado) * 100) : 0;
         setPuntuacionTotal({ total: totalPuntos, promedio, completado, maxPuntosPosibles, porcentajeCumplimiento });
-    }, [checklistSectionsData, checklistItems, tipoEspacio]);
+    }, [checklistSectionsData, checklistItems, tipoEspacio, headerData.entidadContratista]); // << MODIFICADO
 
     // Función para manejar login exitoso (usa getUserRole y updateLastLogin de userRoleService)
     const handleLoginSuccess = async (loggedInUser) => {

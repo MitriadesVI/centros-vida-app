@@ -11,10 +11,18 @@ const contratistas = [
     {
       id: 2,
       nombre: "FUNDACIÓN MULTIACTIVA CARIBE INTEGRADO-FUNDACARIBE",
-      nit: "8001234567-8", // Añade el NIT correcto aquí si es necesario
+      nit: "8001234567-8", 
       representante: "Giovanni de Jesus Carbonell Ferrer",
       contrato: "CD-08-2025-4335",
       supervisor: "Claudia Millán Paramo"
+    },
+    {
+      id: 3,
+      nombre: "FUNDACIÓN 2030",
+      nit: "900.388.138-8",
+      representante: "Cerica Ceres Hernández",
+      contrato: "CD-08-2025-5661",
+      supervisor: "Ismael Enrique Marin Daza"
     }
   ];
   

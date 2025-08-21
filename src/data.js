@@ -1,4 +1,17 @@
 // src/data/index.js
+
+// --- NUEVA LISTA DE CHEQUEO PARA FUNDACIÓN 2030 ---
+const fundacion2030Items = {
+    saludOral: [
+        { id: 'salud-1', number: 1, label: 'La actividad inició a la hora señalada.' },
+        { id: 'salud-2', number: 2, label: 'Los tiempos dedicados a la actividad son idóneos( Soc: 20mins. Or:45 mins. Jor:35-45 mins)' },
+        { id: 'salud-3', number: 3, label: 'El listado de asistencia fue debidamente diligenciado' },
+        { id: 'salud-4', number: 4, label: 'El personal del contratista usó uniforme' },
+        { id: 'salud-5', number: 5, label: 'La actividad desarrollada fue interactiva, participativa y dinámica.' },
+        { id: 'salud-6', number: 6, label: 'Los elementos de higiene oral entregados cumplen con un mínimo de calidad.' }
+    ]
+};
+
 // Ítems para CDV Fijo
 const cdvfijoItems = {
     tecnico: [
@@ -61,7 +74,19 @@ const cdvparqueItems = {
 };
 
 // Función para obtener los datos del checklist según el tipo seleccionado
-const getChecklistData = (tipoEspacio) => {
+const getChecklistData = (tipoEspacio, contratistaNombre) => {
+    // 1. Verificación especial para FUNDACIÓN 2030
+    if (contratistaNombre === 'FUNDACIÓN 2030') {
+        const checklistData = [];
+        checklistData.push({
+            title: 'COMPONENTE DE SALUD ORAL',
+            items: fundacion2030Items.saludOral,
+            maxPuntos: fundacion2030Items.saludOral.length * 100
+        });
+        return checklistData;
+    }
+
+    // 2. Lógica existente para los demás contratistas
     const checklistData = [];
     
     if (tipoEspacio === 'cdvfijo') {
@@ -127,7 +152,11 @@ const getChecklistData = (tipoEspacio) => {
 };
 
 // Calcular el total máximo de puntos posibles según el tipo de espacio
-const getMaxPuntosPosibles = (tipoEspacio) => {
+const getMaxPuntosPosibles = (tipoEspacio, contratistaNombre) => {
+    if (contratistaNombre === 'FUNDACIÓN 2030') {
+        return fundacion2030Items.saludOral.length * 100;
+    }
+    
     let total = 0;
     
     if (tipoEspacio === 'cdvfijo') {
