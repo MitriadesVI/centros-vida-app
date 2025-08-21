@@ -88,6 +88,7 @@ function App() {
 
     // 🔧 NUEVA IMPLEMENTACIÓN: Arranque instantáneo con sesión local + Firebase en paralelo
     useEffect(() => {
+        let unsubscribe = () => {}; // Variable declarada fuera
         const initializeApp = async () => {
             // 1. Intentamos obtener una sesión local primero
             const localSession = await getUserSession();
@@ -102,7 +103,7 @@ function App() {
 
             // 3. En paralelo (o si no hay sesión local), nos suscribimos a Firebase
             // para actualizar el estado o manejar el primer login.
-            const unsubscribe = onAuthChange(async (firebaseUser) => {
+            unsubscribe = onAuthChange(async (firebaseUser) => { // Se asigna a la variable externa
                 if (firebaseUser) {
                     // Si hay un usuario de Firebase, refrescamos los datos por si han cambiado
                     const role = await getUserRole(firebaseUser.uid);
@@ -134,11 +135,10 @@ function App() {
                     setAuthChecked(true);
                 }
             });
-
-            return () => unsubscribe();
         };
 
         initializeApp();
+        return () => unsubscribe(); // Se devuelve la función de limpieza directamente
     }, []); // Se ejecuta solo una vez al montar el componente
 
     // Ya no necesitamos limpiar formularios antiguos porque IndexedDB maneja esto automáticamente
@@ -342,15 +342,23 @@ function App() {
         }
         
         try {
+            // << CAMBIO CRÍTICO AQUÍ >>
+            // Creamos "clones puros" de los objetos de estado antes de guardarlos.
             const formData = {
-                headerData, signatures, generalObservations, checklistSectionsData,
-                photos, geoLocation, tipoEspacio, puntuacionTotal
+                headerData: JSON.parse(JSON.stringify(headerData)),
+                signatures: JSON.parse(JSON.stringify(signatures)),
+                generalObservations: generalObservations, // Este es un string, no necesita clonación
+                checklistSectionsData: JSON.parse(JSON.stringify(checklistSectionsData)),
+                photos: JSON.parse(JSON.stringify(photos)),
+                geoLocation: JSON.parse(JSON.stringify(geoLocation)),
+                tipoEspacio: tipoEspacio, // String, no necesita clonación
+                puntuacionTotal: JSON.parse(JSON.stringify(puntuacionTotal))
             };
             
-            // << CAMBIO PRINCIPAL: Ahora usamos saveFormAsDraft de IndexedDB
             const savedId = await saveFormAsDraft(formData, currentFormId);
+            
             if (savedId && currentFormId !== savedId) setCurrentFormId(savedId);
-            setCurrentFormLastUpdated(new Date().toISOString()); // << Actualizar timestamp
+            setCurrentFormLastUpdated(new Date().toISOString());
             setNotification({ open: true, message: 'Borrador guardado localmente', severity: 'success' });
             setFormChanged(false);
         } catch (error) {
@@ -803,28 +811,33 @@ function App() {
                 {viewMode === 'form' && (
                     <Box sx={{ mt: 2, mb: 2, textAlign: 'center' }}>
                         <Typography variant="h5">{currentFormId ? 'Editando Formulario' : 'Nuevo Formulario'}</Typography>
+                        
                         <Typography variant="body2" color="textSecondary">
                             {currentFormId
-                                ? `ID: ${currentFormId.substring(0, 8)}... ${formChanged ? '(Cambios sin guardar)' : '(Guardado localmente)'}`
+                                // << LA CORRECCIÓN CLAVE ESTÁ AQUÍ >>
+                                ? `ID: ${currentFormId.toString().substring(0, 8)}...` 
                                 : 'Crea un nuevo formulario.'}
                         </Typography>
                         
-                        {/* 🔧 MEJORA: Indicador de estado más claro */}
-                        <Box sx={{ mt: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 1 }}>
-                            <Box sx={{ 
-                                width: 8, 
-                                height: 8, 
-                                borderRadius: '50%', 
-                                backgroundColor: formChanged ? 'warning.main' : 'success.main' 
-                            }} />
-                            <Typography variant="caption" color="text.secondary">
-                                {formChanged ? 'Cambios pendientes de guardar' : 'Todo guardado'}
-                            </Typography>
+                        {/* Contenedor para los indicadores de estado */}
+                        <Box sx={{ mt: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 2.5, flexWrap: 'wrap' }}>
+                            {/* Indicador de estado de guardado */}
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                <Box sx={{ 
+                                    width: 8, 
+                                    height: 8, 
+                                    borderRadius: '50%', 
+                                    backgroundColor: formChanged ? 'warning.main' : 'success.main' 
+                                }} />
+                                <Typography variant="caption" color="text.secondary">
+                                    {formChanged ? 'Cambios pendientes de guardar' : 'Todo guardado'}
+                                </Typography>
+                            </Box>
                         </Box>
-                        
+
                         {currentFormId && 
-                            <Typography variant="caption" color="textSecondary" display="block">
-                                Última act. local: {currentFormLastUpdated ? new Date(currentFormLastUpdated).toLocaleString() : 'N/A'}
+                            <Typography variant="caption" color="textSecondary" display="block" sx={{ mt: 0.5 }}>
+                                Última act. local: {currentFormLastUpdated ? new Date(currentFormLastUpdated).toLocaleString('es-CO') : 'N/A'}
                             </Typography>
                         }
                     </Box>
@@ -883,9 +896,15 @@ function App() {
                         <Box sx={{ mt: 3, pb: 4, display: 'flex', justifyContent: 'center', gap: 2 }}>
                             <Button 
                                 variant="contained" 
-                                onClick={() => { if (formChanged) saveCurrentForm(); generatePdf(); }} 
-                                sx={{ padding: '10px 30px', fontSize: '1.1rem' }} 
-                                disabled={!currentFormId}
+                                onClick={async () => {
+                                    // Aseguramos que se guarde y se obtenga un ID antes de continuar
+                                    if (formChanged || !currentFormId) {
+                                        await saveCurrentForm();
+                                    }
+                                    // La generación del PDF ahora espera a que el guardado termine
+                                    await generatePdf();
+                                }}
+                                sx={{ padding: '10px 30px', fontSize: '1.1rem' }}
                             >
                                 Finalizar y Generar PDF
                             </Button>
