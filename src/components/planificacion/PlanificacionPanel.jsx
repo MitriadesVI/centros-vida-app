@@ -32,6 +32,7 @@ import {
 import AddIcon from '@mui/icons-material/Add';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import DownloadIcon from '@mui/icons-material/Download';
 import EventBusyIcon from '@mui/icons-material/EventBusy';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
@@ -40,6 +41,7 @@ import { getEspacios, getEspaciosFromCache } from '../../services/catalogService
 import {
   ESTADOS,
   cancelarTarea,
+  completarTarea,
   crearTarea,
   detectarChoque,
   obtenerEspaciosSinVisitar,
@@ -57,6 +59,8 @@ const ESTADO_CONFIG = {
   [ESTADOS.COMPLETADA]: { label: 'Completada', color: 'success' },
   [ESTADOS.CANCELADA]: { label: 'Cancelada', color: 'default' }
 };
+
+const VENCIDA_CONFIG = { label: 'Vencida', color: 'error' };
 
 const normalizeDate = (value) => {
   if (typeof value !== 'string' || value.length < 10) {
@@ -187,6 +191,16 @@ const emptyForm = {
   notas: ''
 };
 
+const getTodayString = () => formatDateString(new Date());
+
+const getEstadoDisplay = (tarea) => {
+  if (tarea.estado === ESTADOS.PENDIENTE && tarea.fechaProgramada < getTodayString()) {
+    return VENCIDA_CONFIG;
+  }
+
+  return ESTADO_CONFIG[tarea.estado] || ESTADO_CONFIG[ESTADOS.PENDIENTE];
+};
+
 const PlanificacionPanel = ({ user }) => {
   const [semanaActual, setSemanaActual] = useState(() => buildWeekRange(new Date()));
   const [tareas, setTareas] = useState([]);
@@ -197,6 +211,7 @@ const PlanificacionPanel = ({ user }) => {
   const [saving, setSaving] = useState(false);
   const [validatingRules, setValidatingRules] = useState(false);
   const [cancellingId, setCancellingId] = useState('');
+  const [completingId, setCompletingId] = useState('');
   const [error, setError] = useState('');
   const [dialogError, setDialogError] = useState('');
   const [alertaR1, setAlertaR1] = useState(null);
@@ -304,6 +319,7 @@ const PlanificacionPanel = ({ user }) => {
   const guardadoBloqueado = saving || validatingRules || !formValues.espacio || !formValues.fecha || Boolean(alertaR3?.bloqueado);
   const totalVisitados = espaciosSinVisitar?.visitados?.length || 0;
   const totalEspacios = espaciosSinVisitar?.totalEspacios || 0;
+  const resumenDefaultExpanded = typeof window === 'undefined' ? true : window.innerWidth > 768;
 
   const resetDialog = () => {
     setDialogOpen(false);
@@ -363,6 +379,21 @@ const PlanificacionPanel = ({ user }) => {
     }
   };
 
+  const handleCompleteTask = async (tareaId) => {
+    setCompletingId(tareaId);
+    setError('');
+
+    try {
+      await completarTarea(tareaId, null);
+      await refreshPanel(semanaActual);
+    } catch (completeError) {
+      console.error('Error al completar tarea:', completeError);
+      setError(completeError.message || 'No se pudo completar la tarea.');
+    } finally {
+      setCompletingId('');
+    }
+  };
+
   const handleExportExcel = () => {
     if (tareas.length === 0) {
       setError('No hay tareas en la semana actual para exportar.');
@@ -405,7 +436,19 @@ const PlanificacionPanel = ({ user }) => {
               label={getTaskChipLabel(item)}
               color={color}
               variant="outlined"
-              sx={{ maxWidth: '100%' }}
+              sx={{ maxWidth: '100%', cursor: color === 'error' ? 'pointer' : 'default' }}
+              onClick={color === 'error' ? () => {
+                const espacioMatch = espaciosCatalogo.find(
+                  (espacio) => espacio.nombre?.toLowerCase() === item.nombre?.toLowerCase()
+                );
+
+                setDialogError('');
+                setAlertaR1(null);
+                setAlertaR1b(null);
+                setAlertaR3(null);
+                setFormValues({ espacio: espacioMatch || item, fecha: '', notas: '' });
+                setDialogOpen(true);
+              } : undefined}
             />
           ))}
         </Box>
@@ -455,7 +498,7 @@ const PlanificacionPanel = ({ user }) => {
           </Alert>
         )}
 
-        <Accordion defaultExpanded disableGutters>
+        <Accordion defaultExpanded={resumenDefaultExpanded} disableGutters>
           <AccordionSummary expandIcon={<ExpandMoreIcon />}>
             <Stack
               direction={{ xs: 'column', sm: 'row' }}
@@ -571,9 +614,11 @@ const PlanificacionPanel = ({ user }) => {
                           ) : (
                             <Stack spacing={1.25}>
                               {tareasDia.map((tarea) => {
-                                const estadoConfig = ESTADO_CONFIG[tarea.estado] || ESTADO_CONFIG[ESTADOS.PENDIENTE];
+                                const estadoConfig = getEstadoDisplay(tarea);
+                                const isVencida = tarea.estado === ESTADOS.PENDIENTE && tarea.fechaProgramada < getTodayString();
                                 const isOwnTask = tarea.userId === user.uid;
                                 const isPendingOwnTask = isOwnTask && tarea.estado === ESTADOS.PENDIENTE;
+                                const canComplete = isPendingOwnTask || (isOwnTask && isVencida);
 
                                 return (
                                   <Card
@@ -610,15 +655,31 @@ const PlanificacionPanel = ({ user }) => {
                                           </Typography>
                                         )}
 
-                                        {isPendingOwnTask && (
-                                          <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+                                        {canComplete && (
+                                          <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 0.5 }}>
+                                            <Tooltip title="Marcar completada">
+                                              <span>
+                                                <IconButton
+                                                  size="small"
+                                                  color="success"
+                                                  onClick={() => handleCompleteTask(tarea.id)}
+                                                  disabled={completingId === tarea.id || cancellingId === tarea.id}
+                                                >
+                                                  {completingId === tarea.id ? (
+                                                    <CircularProgress size={18} />
+                                                  ) : (
+                                                    <CheckCircleOutlineIcon fontSize="small" />
+                                                  )}
+                                                </IconButton>
+                                              </span>
+                                            </Tooltip>
                                             <Tooltip title="Cancelar tarea">
                                               <span>
                                                 <IconButton
                                                   size="small"
                                                   color="error"
                                                   onClick={() => handleCancelTask(tarea.id)}
-                                                  disabled={cancellingId === tarea.id}
+                                                  disabled={cancellingId === tarea.id || completingId === tarea.id}
                                                 >
                                                   {cancellingId === tarea.id ? (
                                                     <CircularProgress size={18} />
@@ -704,8 +765,13 @@ const PlanificacionPanel = ({ user }) => {
 
             {alertaR1?.hayChoque && (
               <Alert severity="warning">
-                {alertaR1.tareasConflicto.map((tarea) => tarea.userDisplayName || tarea.userEmail).join(', ')}
-                {' '}ya tiene programada una visita a este espacio el {formValues.fecha}. Puedes continuar si deseas.
+                {alertaR1.tareasConflicto.map((tarea, idx) => (
+                  <span key={tarea.id || idx}>
+                    {idx > 0 && ', '}
+                    <strong>{tarea.userDisplayName || tarea.userEmail}</strong> tiene visita el {tarea.fechaProgramada}
+                  </span>
+                ))}
+                . Puedes continuar si deseas.
               </Alert>
             )}
 
