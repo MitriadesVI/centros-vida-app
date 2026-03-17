@@ -12,8 +12,8 @@ Web app to manage field supervision forms, save drafts locally, generate final P
 - jsPDF / autoTable
 
 ## Roles
-- `admin`: dashboard, admin, forms
-- `supervisor`: dashboard, forms
+- `admin`: dashboard, admin, catalogos, forms
+- `supervisor`: dashboard, catalogos, forms
 - `apoyo`: forms, saved forms
 
 > Important: Firestore `role` values must be lowercase.
@@ -30,6 +30,7 @@ Web app to manage field supervision forms, save drafts locally, generate final P
 ### Collections
 - `users`
 - `formSummaries`
+- `espacios` — catálogo de espacios de atención (gestionado por admin/supervisor)
 
 ### Key rules
 - Keep a single `formSummaries` collection.
@@ -57,11 +58,20 @@ Web app to manage field supervision forms, save drafts locally, generate final P
 - `puntajePorComponente`
 - `detalleItems`
 
+### Important fields in `espacios`
+- `nombre` (string)
+- `tipo` (`cdvfijo` | `cdvparque`)
+- `activo` (boolean)
+- `updatedAt` (serverTimestamp)
+
 ## Local Persistence
 IndexedDB stores:
 - drafts
 - sync status
 - local session
+
+localStorage also stores:
+- `espacios_catalogo` — caché offline del catálogo de espacios (array JSON)
 
 Local sync states:
 - `pending_sync`
@@ -74,9 +84,12 @@ Local sync states:
 - `src/services/formDataService.js`
 - `src/services/dashboardService.js`
 - `src/services/userRoleService.js`
+- `src/services/catalogService.js`
 - `src/components/SavedForms.jsx`
+- `src/components/HeaderForm.jsx`
 - `src/components/dashboard/Dashboard.jsx`
 - `src/components/dashboard/BitacoraObservaciones.jsx`
+- `src/components/catalogos/CatalogosPanel.jsx`
 
 ## Current Decisions
 - Single Firestore collection: `formSummaries`
@@ -87,12 +100,21 @@ Local sync states:
 - Dashboard default filter is `vigencia: 2026` (numeric)
 - Old docs without `vigencia` field are filtered by inferring the year from `fechaVisita`
 - Local autosave is temporarily disabled; drafts are currently saved manually and before finalizing
+- Catálogo de espacios usa caché offline-first: se carga desde `localStorage` al abrir el formulario y se refresca desde Firestore en segundo plano
+- El campo "Espacio de Atención" en `HeaderForm` usa `<Autocomplete freeSolo>` alimentado por el catálogo; permite escritura libre si el espacio no está en la lista
+- La importación masiva de espacios usa `writeBatch` en chunks de 500 (límite de Firestore)
 
 ## Dashboard Filters
 - `vigencia` (number | `'todos'`): default `2026`. Applied in `dashboardService.js` with fallback to `fechaVisita` year for legacy docs.
 - `tipoEspacio`: `'todos'` | `'cdvfijo'` | `'cdvparque'`
 - `contratista`: `'todos'` | string
 - `fechaInicio` / `fechaFin`: ISO date strings
+
+## Catálogo de Espacios
+- `catalogService.js` expone: `getEspacios`, `getEspaciosFromCache`, `addEspacio`, `updateEspacio`, `deleteEspacio`, `importarEspaciosCSV`
+- `CatalogosPanel.jsx` permite CRUD completo y carga masiva vía CSV
+- CSV esperado: encabezados `nombre,tipo` (separador `,` o `;`). Si `tipo` está ausente o es inválido, se asigna `cdvfijo` por defecto
+- Solo espacios con `activo: true` aparecen en el Autocomplete del formulario
 
 ## Pending Work
 1. Prevent remote sync attempts when offline.
@@ -108,3 +130,7 @@ Local sync states:
 - Confirm dashboard shows observation log when Firestore has `observacionesGenerales`.
 - Confirm dashboard loads only 2026 docs by default.
 - Confirm legacy docs (no `vigencia` field) are excluded via `fechaVisita` year inference.
+- Confirm Catálogos tab is visible only for admin and supervisor roles.
+- Add an espacio, verify it appears in the HeaderForm Autocomplete.
+- Import a CSV, verify batch write and table refresh.
+- Go offline, open HeaderForm, verify cached espacios load from localStorage.

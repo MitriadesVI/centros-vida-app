@@ -2,6 +2,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import '../styles/forms.css';
 import './HeaderForm.css';
 import contratistas from '../data/contratistas'; // Importamos los datos de contratistas
+import Autocomplete from '@mui/material/Autocomplete';
+import TextField from '@mui/material/TextField';
+import { getEspacios, getEspaciosFromCache } from '../services/catalogService';
 
 const HeaderForm = ({ onDataChange, initialData = {}, onTipoEspacioChange, userName = '' }) => {
     const [formData, setFormData] = useState(() => {
@@ -29,6 +32,18 @@ const HeaderForm = ({ onDataChange, initialData = {}, onTipoEspacioChange, userN
 
     // Estado para el contratista seleccionado
     const [contratistaSeleccionado, setContratistaSeleccionado] = useState('');
+
+    // Estado para el catálogo de espacios
+    const [espaciosList, setEspaciosList] = useState([]);
+
+    // Cargar catálogo de espacios (cache primero, luego Firebase en segundo plano)
+    useEffect(() => {
+        const cached = getEspaciosFromCache();
+        if (cached.length > 0) setEspaciosList(cached);
+        getEspacios()
+            .then(data => setEspaciosList(data))
+            .catch(() => {}); // fallo silencioso si está offline
+    }, []);
 
     // Efecto para establecer fecha y hora si es un formulario nuevo
     useEffect(() => {
@@ -81,6 +96,15 @@ const HeaderForm = ({ onDataChange, initialData = {}, onTipoEspacioChange, userN
         const { name, value } = e.target;
         const updatedFormData = { ...formData, [name]: value };
         setFormData(updatedFormData);
+    };
+
+    const updateEspacioAtencion = (nextValue) => {
+        const normalizedValue = nextValue || '';
+        setFormData(prevData => (
+            prevData.espacioAtencion === normalizedValue
+                ? prevData
+                : { ...prevData, espacioAtencion: normalizedValue }
+        ));
     };
 
     // Manejador para el cambio de contratista seleccionado
@@ -195,13 +219,32 @@ const HeaderForm = ({ onDataChange, initialData = {}, onTipoEspacioChange, userN
                         {/* Espacio de Atención */}
                         <div className="form-group">
                             <label className="form-label" htmlFor="espacioAtencion">Espacio de Atención:</label>
-                            <input
-                                type="text"
-                                className="form-control"
-                                id="espacioAtencion"
-                                name="espacioAtencion"
+                            <Autocomplete
+                                freeSolo
+                                options={espaciosList.filter(e => e.activo).map(e => e.nombre)}
                                 value={formData.espacioAtencion || ''}
-                                onChange={handleChange}
+                                onChange={(_, newValue) => {
+                                    updateEspacioAtencion(newValue);
+                                }}
+                                onInputChange={(_, newInputValue, reason) => {
+                                    if (reason === 'reset') return;
+                                    updateEspacioAtencion(newInputValue);
+                                }}
+                                renderInput={(params) => (
+                                    <TextField
+                                        {...params}
+                                        id="espacioAtencion"
+                                        name="espacioAtencion"
+                                        size="small"
+                                        placeholder="Seleccione o escriba el espacio..."
+                                        sx={{
+                                            '& .MuiOutlinedInput-root': {
+                                                backgroundColor: 'white',
+                                                fontSize: '0.95rem'
+                                            }
+                                        }}
+                                    />
+                                )}
                             />
                         </div>
 

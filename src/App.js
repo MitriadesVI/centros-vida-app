@@ -13,6 +13,7 @@ import { saveFormSummary } from './services/formDataService';
 import Login from './components/Login'; 
 import Dashboard from './components/dashboard/Dashboard'; 
 import AdminPanel from './components/admin/AdminPanel'; // << NUEVA IMPORTACIÓN
+import CatalogosPanel from './components/catalogos/CatalogosPanel';
 
 // Importación de los logos en base64
 import { HEADER_LOGO, FOOTER_BANNER } from './assets/logoImages.js';
@@ -723,6 +724,9 @@ function App() {
                 <Paper sx={{ position: 'sticky', top: 0, zIndex: 1000, bgcolor: 'background.paper' }}>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', px: 2, borderBottom: 1, borderColor: 'divider' }}>
                         <Tabs
+                          variant="scrollable"
+                          scrollButtons="auto"
+                          allowScrollButtonsMobile
                           value={viewMode}
                           onChange={(e, newValue) => {
                             // Verificar permisos basados en rol
@@ -743,6 +747,15 @@ function App() {
                               });
                               return;
                             }
+
+                            if (newValue === 'catalogos' && userRole !== ROLES.ADMIN && userRole !== ROLES.SUPERVISOR) {
+                              setNotification({
+                                open: true,
+                                message: 'Solo administradores y supervisores pueden acceder a los catálogos',
+                                severity: 'warning'
+                              });
+                              return;
+                            }
                             
                             // 🔧 MEJORA: Siempre guardar antes de cambiar de vista
                             if (formChanged && viewMode === 'form' && localSaveStatus !== 'saving') {
@@ -750,7 +763,7 @@ function App() {
                             }
                             setViewMode(newValue);
                           }}
-                          sx={{ flexGrow: 1 }}
+                          sx={{ flexGrow: 1, minWidth: 0 }}
                         >
                           <Tab label="Formulario Actual" value="form" />
                           <Tab label="Formularios Guardados" value="saved" />
@@ -759,6 +772,9 @@ function App() {
                           )}
                           {userRole === ROLES.ADMIN && (
                             <Tab label="Administración" value="admin" />
+                          )}
+                          {(userRole === ROLES.ADMIN || userRole === ROLES.SUPERVISOR) && (
+                            <Tab label="Catálogos" value="catalogos" />
                           )}
                         </Tabs>
 
@@ -925,8 +941,10 @@ function App() {
                     <SavedForms onLoadForm={loadSavedForm} user={user} />
                 ) : viewMode === 'dashboard' ? (
                     <Dashboard user={user} />
-                ) : viewMode === 'admin' ? ( 
-                    <AdminPanel user={user} /> 
+                ) : viewMode === 'admin' ? (
+                    <AdminPanel user={user} />
+                ) : viewMode === 'catalogos' ? (
+                    <CatalogosPanel user={user} />
                 ) : null}
 
                 <Snackbar open={notification.open} autoHideDuration={6000} onClose={handleCloseNotification} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
