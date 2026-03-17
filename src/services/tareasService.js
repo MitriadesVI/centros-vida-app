@@ -139,6 +139,7 @@ export const crearTarea = async (datosTarea) => {
     fechaProgramada: datosTarea.fechaProgramada,
     userId: currentUser.uid,
     userEmail: currentUser.email || '',
+    userDisplayName: currentUser.displayName || '',
     estado: ESTADOS.PENDIENTE,
     vigencia: deriveVigencia(datosTarea.fechaProgramada),
     notas: String(datosTarea.notas || '').trim(),
@@ -182,9 +183,10 @@ export const detectarChoque = async (espacioId, fechaProgramada) => {
   const currentUser = requireCurrentUser();
 
   if (!espacioId || !fechaProgramada) {
-    return { hayChoque: false, tareasConflicto: [] };
+    return { hayChoque: false, tareasConflicto: [], visitaPrevia: null };
   }
 
+  // R1: Buscar tareas de otros usuarios para el mismo espacio y fecha
   const q = query(
     collection(db, TAREAS_COLLECTION),
     where('espacioId', '==', espacioId),
@@ -196,9 +198,50 @@ export const detectarChoque = async (espacioId, fechaProgramada) => {
     tarea.userId !== currentUser.uid && isNotCancelled(tarea)
   ));
 
+  // R1b: Buscar si este espacio ya fue visitado esta semana (en formSummaries)
+  // Obtenemos el nombre del espacio desde la tarea o el catálogo
+  let visitaPrevia = null;
+  try {
+    // Primero obtener el nombre del espacio desde el catálogo
+    const espacioDoc = await getDoc(doc(db, ESPACIOS_COLLECTION, espacioId));
+    const espacioNombre = espacioDoc.exists() ? espacioDoc.data().nombre : '';
+
+    if (espacioNombre) {
+      const { lunes, domingo } = obtenerRangoSemana(fechaProgramada);
+
+      if (lunes && domingo) {
+        const visitasQuery = query(
+          collection(db, FORM_SUMMARIES_COLLECTION),
+          where('fechaVisita', '>=', lunes),
+          where('fechaVisita', '<=', domingo),
+          orderBy('fechaVisita', 'asc')
+        );
+
+        const visitasSnap = await getDocs(visitasQuery);
+        const normalizedTarget = normalizeName(espacioNombre);
+
+        const visitaEncontrada = mapSnapshot(visitasSnap).find(
+          (v) => normalizeName(v.espacioAtencion) === normalizedTarget
+        );
+
+        if (visitaEncontrada) {
+          visitaPrevia = {
+            fechaVisita: visitaEncontrada.fechaVisita || '',
+            userEmail: visitaEncontrada.userEmail || '',
+            apoyoSupervision: visitaEncontrada.apoyoSupervision || '',
+            porcentajeCumplimiento: visitaEncontrada.porcentajeCumplimiento || 0
+          };
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('No se pudo verificar visitas previas (R1b):', err);
+  }
+
   return {
     hayChoque: tareasConflicto.length > 0,
-    tareasConflicto
+    tareasConflicto,
+    visitaPrevia
   };
 };
 
