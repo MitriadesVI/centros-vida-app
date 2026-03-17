@@ -6,6 +6,7 @@ const DashboardFilters = ({ onFilterChange, initialFilters }) => {
   const [filtros, setFiltros] = useState(initialFilters || {
     fechaInicio: '',
     fechaFin: '',
+    vigencia: 2026,
     tipoEspacio: 'todos',
     contratista: 'todos'
   });
@@ -47,6 +48,7 @@ const DashboardFilters = ({ onFilterChange, initialFilters }) => {
     const filtrosLimpios = {
       fechaInicio: '',
       fechaFin: '',
+      vigencia: 2026,
       tipoEspacio: 'todos',
       contratista: 'todos'
     };
@@ -84,6 +86,22 @@ const DashboardFilters = ({ onFilterChange, initialFilters }) => {
           />
         </Grid>
         
+        <Grid item xs={12} sm={6} md={2}>
+          <FormControl fullWidth>
+            <InputLabel>Vigencia</InputLabel>
+            <Select
+              name="vigencia"
+              value={filtros.vigencia || 2026}
+              onChange={handleChange}
+              label="Vigencia"
+            >
+              <MenuItem value={2026}>2026</MenuItem>
+              <MenuItem value={2025}>2025</MenuItem>
+              <MenuItem value={"todos"}>Todos los años</MenuItem>
+            </Select>
+          </FormControl>
+        </Grid>
+
         <Grid item xs={12} sm={6} md={2}>
           <FormControl fullWidth>
             <InputLabel>Tipo de Espacio</InputLabel>

@@ -14,7 +14,8 @@ import {
   DialogActions,
   Divider,
   Paper,
-  Alert
+  Alert,
+  Chip
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
@@ -73,17 +74,61 @@ const SavedForms = ({ onLoadForm }) => {
     }
   };
 
-  // << 4. ETIQUETA DE ESTADO AHORA LEE DE form.status
-  const getStatusLabel = (status) => {
+  const getLocalStatusLabel = (status) => {
     switch (status) {
       case 'borrador':
         return 'Borrador';
       case 'finalizado':
-        return 'Finalizado (Pendiente de Sincronizar)';
+        return 'Finalizado';
       case 'sincronizado':
         return 'Sincronizado';
       default:
         return 'Desconocido';
+    }
+  };
+
+  const getLocalStatusColor = (status) => {
+    switch (status) {
+      case 'borrador':
+        return 'warning';
+      case 'finalizado':
+        return 'info';
+      case 'sincronizado':
+        return 'success';
+      default:
+        return 'default';
+    }
+  };
+
+  const resolveSyncStatus = (form) => {
+    if (form.syncStatus) return form.syncStatus;
+    if (form.status === 'sincronizado') return 'synced';
+    return 'pending_sync';
+  };
+
+  const getSyncStatusLabel = (syncStatus) => {
+    switch (syncStatus) {
+      case 'pending_sync':
+        return 'Pendiente de sincronizar';
+      case 'synced':
+        return 'Sincronizado';
+      case 'sync_error':
+        return 'Error de sincronización';
+      default:
+        return 'Sin estado';
+    }
+  };
+
+  const getSyncStatusColor = (syncStatus) => {
+    switch (syncStatus) {
+      case 'pending_sync':
+        return 'warning';
+      case 'synced':
+        return 'success';
+      case 'sync_error':
+        return 'error';
+      default:
+        return 'default';
     }
   };
 
@@ -114,15 +159,40 @@ const SavedForms = ({ onLoadForm }) => {
                   <ListItemText
                     primary={`Visita: ${form.headerData?.espacioAtencion || 'Sin ubicación'}`}
                     secondary={
-                      <>
+                      <Box sx={{ mt: 0.5 }}>
                         <Typography component="span" variant="body2" color="textPrimary">
                           {`Última actualización: ${formatDate(form.lastUpdated)}`}
                         </Typography>
-                        <br />
-                        <Typography component="span" variant="body2">
-                          {`Estado: ${getStatusLabel(form.status)}`}
-                        </Typography>
-                      </>
+                        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mt: 1 }}>
+                          <Chip
+                            size="small"
+                            label={`Local: ${getLocalStatusLabel(form.status)}`}
+                            color={getLocalStatusColor(form.status)}
+                            variant="outlined"
+                          />
+                          <Chip
+                            size="small"
+                            label={`Sync: ${getSyncStatusLabel(resolveSyncStatus(form))}`}
+                            color={getSyncStatusColor(resolveSyncStatus(form))}
+                            variant={resolveSyncStatus(form) === 'synced' ? 'filled' : 'outlined'}
+                          />
+                        </Box>
+                        {form.lastSyncError && (
+                          <Typography component="div" variant="caption" color="error" sx={{ mt: 0.5 }}>
+                            {`Detalle: ${form.lastSyncError}`}
+                          </Typography>
+                        )}
+                        {form.remoteDocId && (
+                          <Typography component="div" variant="caption" color="text.secondary" sx={{ mt: 0.5 }}>
+                            {`ID remoto: ${form.remoteDocId}`}
+                          </Typography>
+                        )}
+                        {form.lastSyncedAt && (
+                          <Typography component="div" variant="caption" color="text.secondary" sx={{ mt: 0.5 }}>
+                            {`Última sincronización: ${formatDate(form.lastSyncedAt)}`}
+                          </Typography>
+                        )}
+                      </Box>
                     }
                   />
                   <ListItemSecondaryAction>

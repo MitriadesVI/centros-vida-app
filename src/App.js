@@ -1,14 +1,14 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { ThemeProvider } from '@mui/material/styles';
-import { Container, Box, Button, Snackbar, Alert, Typography, Tab, Tabs, Paper, Grid } from '@mui/material';
+import { Container, Box, Button, Snackbar, Alert, Typography, Tab, Tabs, Paper, Grid, Chip } from '@mui/material';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 
 // --- IMPORTACIONES DE SERVICIOS Y COMPONENTES ---
 // Servicios de autenticación (manteniendo los que no cambian)
-import { onAuthChange, getCurrentUser, logout } from './services/authService'; 
+import { onAuthChange, logout } from './services/authService'; 
 // Servicios de roles de usuario (actualizados/nuevos)
-import { getUserRole, ROLES, updateLastLogin } from './services/userRoleService'; // << NUEVA IMPORTACIÓN / ACTUALIZADA
+import { getUserRole, getUserProfile, ROLES, updateLastLogin } from './services/userRoleService'; // << NUEVA IMPORTACIÓN / ACTUALIZADA
 import { saveFormSummary } from './services/formDataService'; 
 import Login from './components/Login'; 
 import Dashboard from './components/dashboard/Dashboard'; 
@@ -33,20 +33,16 @@ import {
     saveFormAsDraft,
     getForm,
     finalizeForm,
+    updateFormSyncStatus,
     saveUserSession,    // << AÑADIR
     getUserSession,     // << AÑADIR
     clearUserSession    // << AÑADIR
 } from './services/dbService'; // << NUEVA IMPORTACIÓN
 
-// Ya no necesitamos estos del localStorageService - comentados para referencia
-// import {
-//     saveFormToLocalStorage,
-//     getFormFromLocalStorage,
-//     markFormAsComplete,
-//     cleanupOldForms
-// } from './services/localStorageService';
-
 function App() {
+    const AUTO_SAVE_DELAY_MS = 1800;
+    const AUTO_SAVE_ENABLED = false;
+
     // Estado para controlar el modo de visualización
     const [viewMode, setViewMode] = useState('form'); // 'form', 'saved', 'dashboard' o 'admin'
 
@@ -77,14 +73,35 @@ function App() {
     const [currentFormId, setCurrentFormId] = useState(null);
     const [formChanged, setFormChanged] = useState(false);
     const [currentFormLastUpdated, setCurrentFormLastUpdated] = useState(null); // << Nuevo estado para trackear última actualización
+    const [isOnline, setIsOnline] = useState(() => (typeof navigator === 'undefined' ? true : navigator.onLine));
+    const [localSaveStatus, setLocalSaveStatus] = useState('saved');
     const [notification, setNotification] = useState({
         open: false,
         message: '',
         severity: 'success'
     });
+    const suppressDirtyTrackingRef = useRef(false);
+    const suppressChecklistResetRef = useRef(false);
+    const changeVersionRef = useRef(0);
 
     // 🔧 MEJORA: Estado para manejar verificaciones de sesión sin perder datos
     // const [authVerifying, setAuthVerifying] = useState(false); // Ya no necesario con arranque instantáneo
+
+    // Detecta cambios de conectividad sin tocar el backend.
+    useEffect(() => {
+        const updateConnectionStatus = () => {
+            setIsOnline(typeof navigator === 'undefined' ? true : navigator.onLine);
+        };
+
+        updateConnectionStatus();
+        window.addEventListener('online', updateConnectionStatus);
+        window.addEventListener('offline', updateConnectionStatus);
+
+        return () => {
+            window.removeEventListener('online', updateConnectionStatus);
+            window.removeEventListener('offline', updateConnectionStatus);
+        };
+    }, []);
 
     // 🔧 NUEVA IMPLEMENTACIÓN: Arranque instantáneo con sesión local + Firebase en paralelo
     useEffect(() => {
@@ -96,7 +113,7 @@ function App() {
             if (localSession) {
                 // 2. Si existe una sesión local, cargamos la app INMEDIATAMENTE
                 console.log('🚀 Usando sesión local para arranque instantáneo.');
-                setUser({ uid: localSession.uid, email: localSession.email });
+                setUser({ uid: localSession.uid, email: localSession.email, nombre: localSession.nombre || '' });
                 setUserRole(localSession.role);
                 setAuthChecked(true); // ¡La app ya no espera!
             }
@@ -118,10 +135,12 @@ function App() {
                             severity: 'error'
                         });
                     } else {
-                        setUser(firebaseUser);
+                        const profile = await getUserProfile(firebaseUser.uid);
+                        const nombre = profile?.nombre || '';
+                        setUser({ ...firebaseUser, nombre });
                         setUserRole(role);
                         // Aseguramos que la sesión local esté siempre actualizada
-                        await saveUserSession({ uid: firebaseUser.uid, email: firebaseUser.email, role });
+                        await saveUserSession({ uid: firebaseUser.uid, email: firebaseUser.email, role, nombre });
                     }
                 } else {
                     // Si no hay usuario en Firebase (sesión expirada, etc.), limpiamos todo.
@@ -141,141 +160,118 @@ function App() {
         return () => unsubscribe(); // Se devuelve la función de limpieza directamente
     }, []); // Se ejecuta solo una vez al montar el componente
 
-    // Ya no necesitamos limpiar formularios antiguos porque IndexedDB maneja esto automáticamente
-    // useEffect(() => {
-    //     cleanupOldForms();
-    // }, []);
+    const buildLocalDraftData = useCallback(() => ({
+        headerData: JSON.parse(JSON.stringify(headerData)),
+        signatures: JSON.parse(JSON.stringify(signatures)),
+        generalObservations,
+        checklistSectionsData: JSON.parse(JSON.stringify(checklistSectionsData)),
+        photos: JSON.parse(JSON.stringify(photos)),
+        geoLocation: JSON.parse(JSON.stringify(geoLocation)),
+        tipoEspacio,
+        puntuacionTotal: JSON.parse(JSON.stringify(puntuacionTotal))
+    }), [headerData, signatures, generalObservations, checklistSectionsData, photos, geoLocation, tipoEspacio, puntuacionTotal]);
 
-    // 🔧 DESHABILITADO: Autoguardado automático para mejorar performance en campo
-    /*
-    // 🔧 DESHABILITADO: Autoguardado automático para mejorar performance en campo
-    /*
+    // Marca cambios del formulario sin dispararse al cargar borradores existentes.
     useEffect(() => {
-        if (formChanged) { // 🎯 SIN dependencia de 'user'
-            // 🔍 DEBUG: Incrementar contador de renders
-            renderCountRef.current += 1;
-            lastChangeTimeRef.current = Date.now();
-            
-            console.log('🔍 RENDER CYCLES:', {
-                renderCount: renderCountRef.current,
-                formChanged,
-                checklistKeys: Object.keys(checklistSectionsData),
-                observationsLength: generalObservations?.length,
-                lastObservationChar: generalObservations?.slice(-1),
-                timestamp: new Date().toISOString()
-            });
-            
-            console.log('⏱️ App: Iniciando timer de autoguardado (5 segundos con debounce)');
-            const autoSaveTimer = setTimeout(() => {
-                // 🔧 DEBOUNCE: Solo guardar si no hay cambios recientes (2 segundos)
-                const timeSinceLastChange = Date.now() - lastChangeTimeRef.current;
-                if (timeSinceLastChange < 2000) {
-                    console.log('⏭️ App: Saltando autoguardado, cambios muy recientes');
-                    return;
-                }
-                
-                try {
-                    const formData = {
-                        headerData, 
-                        signatures, 
-                        generalObservations, 
-                        checklistSectionsData,
-                        photos, 
-                        geoLocation, 
-                        tipoEspacio, 
-                        puntuacionTotal,
-                        lastUpdated: new Date().toISOString()
-                    };
-                    
-                    console.log('💾 App: Ejecutando autoguardado con datos:', {
-                        headerKeys: Object.keys(headerData),
-                        observationsLength: generalObservations?.length || 0,
-                        checklistSections: Object.keys(checklistSectionsData),
-                        photosCount: photos.length,
-                        observationsContent: generalObservations,
-                        renderCount: renderCountRef.current
-                    });
-                    
-                    const savedId = saveFormToLocalStorage(formData, currentFormId);
-                    if (savedId && currentFormId !== savedId) {
-                        setCurrentFormId(savedId);
-                    }
-                    setFormChanged(false);
-                    console.log('✅ App: Autoguardado local completado exitosamente, ID:', savedId);
-                } catch (error) {
-                    console.error('❌ App: Error en autoguardado local:', error);
-                }
-            }, 5000); // 🔧 MEJORA: Aumentado a 5 segundos
-            
-            return () => {
-                console.log('🔄 App: Cancelando timer de autoguardado');
-                clearTimeout(autoSaveTimer);
-            };
+        if (suppressDirtyTrackingRef.current) {
+            suppressDirtyTrackingRef.current = false;
+            return;
         }
-    }, [headerData, signatures, generalObservations, checklistSectionsData, photos, geoLocation, tipoEspacio, puntuacionTotal, formChanged, currentFormId]); // 🎯 SIN 'user'
-    */
 
-    // 🔧 DESHABILITADO: Guardado de emergencia al perder foco de ventana para mejorar performance
-    /*
-    useEffect(() => {
-        const handleBeforeUnload = () => {
-            if (formChanged) {
-                const formData = {
-                    headerData, signatures, generalObservations, checklistSectionsData,
-                    photos, geoLocation, tipoEspacio, puntuacionTotal,
-                    lastUpdated: new Date().toISOString()
-                };
-                saveFormToLocalStorage(formData, currentFormId);
-                console.log('Guardado de emergencia antes de cerrar');
-            }
-        };
-
-        const handleVisibilityChange = () => {
-            if (document.hidden && formChanged) {
-                const formData = {
-                    headerData, signatures, generalObservations, checklistSectionsData,
-                    photos, geoLocation, tipoEspacio, puntuacionTotal,
-                    lastUpdated: new Date().toISOString()
-                };
-                saveFormToLocalStorage(formData, currentFormId);
-                console.log('Guardado de emergencia al minimizar ventana');
-            }
-        };
-
-        window.addEventListener('beforeunload', handleBeforeUnload);
-        document.addEventListener('visibilitychange', handleVisibilityChange);
-
-        return () => {
-            window.removeEventListener('beforeunload', handleBeforeUnload);
-            document.removeEventListener('visibilitychange', handleVisibilityChange);
-        };
-    }, [formChanged, headerData, signatures, generalObservations, checklistSectionsData, photos, geoLocation, tipoEspacio, puntuacionTotal, currentFormId]);
-    */
-
-    // 🔧 SIMPLIFICADO: Detección de cambios sin loops infinitos
-    useEffect(() => {
         const hasHeaderData = Object.keys(headerData).length > 2;
         const hasObservations = generalObservations && generalObservations.trim().length > 0;
         const hasChecklistData = Object.keys(checklistSectionsData).length > 0;
         const hasPhotos = photos.length > 0;
         const hasSignatures = Object.keys(signatures).some(k => signatures[k].data);
         const hasGeoLocation = Object.keys(geoLocation).length > 0;
-        
-        //  SIMPLIFICADO: Solo marcar como cambiado si realmente hay datos y no está ya marcado
-        const hasData = hasHeaderData || hasObservations || hasChecklistData || hasPhotos || hasSignatures || hasGeoLocation;
-        if (hasData && !formChanged) {
+        const hasTipoEspacio = Boolean(tipoEspacio);
+        const hasData = hasHeaderData || hasObservations || hasChecklistData || hasPhotos || hasSignatures || hasGeoLocation || hasTipoEspacio;
+
+        if (hasData) {
+            changeVersionRef.current += 1;
             setFormChanged(true);
+            setLocalSaveStatus(prevStatus => prevStatus === 'saving' ? prevStatus : 'dirty');
+        } else {
+            setFormChanged(false);
+            setLocalSaveStatus('saved');
         }
-    }, [headerData, signatures, generalObservations, checklistSectionsData, photos, geoLocation, formChanged]); // Removido currentFormId
+    }, [headerData, signatures, generalObservations, checklistSectionsData, photos, geoLocation, tipoEspacio]);
+
+    // Solo autoguardamos en IndexedDB; Firebase queda para la sincronización explícita.
+    const saveDraftLocally = useCallback(async ({ showNotification = false } = {}) => {
+        if (!formChanged) {
+            if (showNotification) {
+                setNotification({ open: true, message: 'No hay cambios para guardar', severity: 'info' });
+            }
+            return currentFormId;
+        }
+
+        const changeVersionAtSaveStart = changeVersionRef.current;
+        setLocalSaveStatus('saving');
+
+        try {
+            const formData = buildLocalDraftData();
+            const savedId = await saveFormAsDraft(formData, currentFormId);
+            const savedAt = new Date().toISOString();
+
+            if (savedId && currentFormId !== savedId) {
+                setCurrentFormId(savedId);
+            }
+
+            setCurrentFormLastUpdated(savedAt);
+
+            if (changeVersionRef.current !== changeVersionAtSaveStart) {
+                setLocalSaveStatus('dirty');
+                return savedId;
+            }
+
+            setFormChanged(false);
+            setLocalSaveStatus('saved');
+
+            if (showNotification) {
+                setNotification({ open: true, message: 'Borrador guardado localmente', severity: 'success' });
+            }
+
+            return savedId;
+        } catch (error) {
+            console.error("❌ App: Error en guardado local:", error);
+            setLocalSaveStatus('error');
+
+            if (showNotification) {
+                setNotification({ open: true, message: 'Error al guardar el borrador', severity: 'error' });
+            }
+
+            throw error;
+        }
+    }, [buildLocalDraftData, currentFormId, formChanged]);
+
+    useEffect(() => {
+        if (!AUTO_SAVE_ENABLED || !formChanged || localSaveStatus !== 'dirty') {
+            return undefined;
+        }
+
+        const autoSaveTimer = setTimeout(() => {
+            saveDraftLocally().catch((error) => {
+                console.error('❌ App: Error en autoguardado local:', error);
+            });
+        }, AUTO_SAVE_DELAY_MS);
+
+        return () => clearTimeout(autoSaveTimer);
+    }, [AUTO_SAVE_DELAY_MS, AUTO_SAVE_ENABLED, formChanged, localSaveStatus, saveDraftLocally]);
 
     // Efecto para manejar cambios en el tipo de espacio y contratista
     useEffect(() => {
+        const shouldSkipChecklistReset = suppressChecklistResetRef.current;
+        if (suppressChecklistResetRef.current) {
+            suppressChecklistResetRef.current = false;
+        }
+
         // Ahora pasamos también el nombre del contratista desde headerData
         const newChecklist = getChecklistData(tipoEspacio, headerData.entidadContratista); // << MODIFICADO
         setChecklistItems(newChecklist);
         
         // Reseteamos los datos del checklist si el tipo de espacio o el contratista cambian
-        if (tipoEspacio || headerData.entidadContratista) {
+        if (!shouldSkipChecklistReset && (tipoEspacio || headerData.entidadContratista)) {
             setChecklistSectionsData({});
         }
     }, [tipoEspacio, headerData.entidadContratista]); // << MODIFICADO
@@ -313,13 +309,12 @@ function App() {
             severity: 'error'
           });
         } else {
-          setUser(loggedInUser);
+          const profile = await getUserProfile(loggedInUser.uid);
+          const nombre = profile?.nombre || '';
+          setUser({ ...loggedInUser, nombre });
           setUserRole(role);
-          await updateLastLogin(loggedInUser.uid); // Usa updateLastLogin de userRoleService
-
-          // << AÑADIR ESTA LÍNEA: Guardar sesión local para arranque instantáneo >>
-          await saveUserSession({ uid: loggedInUser.uid, email: loggedInUser.email, role });
-
+          await updateLastLogin(loggedInUser.uid);
+          await saveUserSession({ uid: loggedInUser.uid, email: loggedInUser.email, role, nombre });
           setViewMode('form');
         }
       } catch (error) {
@@ -334,36 +329,11 @@ function App() {
       }
     };
 
-    // 🔧 MEJORA: Función de guardado local que siempre funciona - ACTUALIZADA PARA INDEXEDDB
     const saveCurrentForm = async () => {
-        if (!formChanged) {
-            setNotification({ open: true, message: 'No hay cambios para guardar', severity: 'info' });
-            return;
-        }
-        
         try {
-            // << CAMBIO CRÍTICO AQUÍ >>
-            // Creamos "clones puros" de los objetos de estado antes de guardarlos.
-            const formData = {
-                headerData: JSON.parse(JSON.stringify(headerData)),
-                signatures: JSON.parse(JSON.stringify(signatures)),
-                generalObservations: generalObservations, // Este es un string, no necesita clonación
-                checklistSectionsData: JSON.parse(JSON.stringify(checklistSectionsData)),
-                photos: JSON.parse(JSON.stringify(photos)),
-                geoLocation: JSON.parse(JSON.stringify(geoLocation)),
-                tipoEspacio: tipoEspacio, // String, no necesita clonación
-                puntuacionTotal: JSON.parse(JSON.stringify(puntuacionTotal))
-            };
-            
-            const savedId = await saveFormAsDraft(formData, currentFormId);
-            
-            if (savedId && currentFormId !== savedId) setCurrentFormId(savedId);
-            setCurrentFormLastUpdated(new Date().toISOString());
-            setNotification({ open: true, message: 'Borrador guardado localmente', severity: 'success' });
-            setFormChanged(false);
+            return await saveDraftLocally({ showNotification: true });
         } catch (error) {
             console.error("❌ App: Error en guardado local manual:", error);
-            setNotification({ open: true, message: 'Error al guardar el borrador', severity: 'error' });
         }
     };
 
@@ -381,6 +351,8 @@ function App() {
         console.log('📂 App: Formulario recuperado de IndexedDB:', savedForm);
         
         if (savedForm) {
+            suppressDirtyTrackingRef.current = true;
+            suppressChecklistResetRef.current = true;
             // La estructura de datos es directa ahora, no hay wrapper 'data'
             console.log('📂 App: Cargando datos del formulario:', {
                 headerKeys: Object.keys(savedForm.headerData || {}),
@@ -404,6 +376,7 @@ function App() {
             setCurrentFormId(formId);
             setCurrentFormLastUpdated(savedForm.lastUpdated); // << Actualizar timestamp desde el formulario cargado
             setFormChanged(false);
+            setLocalSaveStatus('saved');
             setViewMode('form');
             setNotification({ open: true, message: 'Formulario cargado correctamente', severity: 'success' });
             console.log('✅ App: Formulario cargado exitosamente');
@@ -420,9 +393,10 @@ function App() {
         const currentTime = now.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', hour12: false });
         
         console.log('🧹 Iniciando reseteo completo del formulario');
+        suppressDirtyTrackingRef.current = true;
         
         // 🔧 RESETEO COMPLETO: Limpiar todos los estados
-        setHeaderData({ fechaVisita: currentDate, horaVisita: currentTime });
+        setHeaderData({ fechaVisita: currentDate, horaVisita: currentTime, apoyoSupervision: user?.nombre || '' });
         setSignatures({
             'apoyo a la supervisión quien realiza la visita': { data: '', checked: false },
             'profesional/técnico del contratista quien atiende la visita': { data: '', checked: false },
@@ -439,6 +413,7 @@ function App() {
         setCurrentFormId(null);
         setCurrentFormLastUpdated(null); // << Limpiar timestamp al resetear
         setFormChanged(false);
+        setLocalSaveStatus('saved');
         
         // 🔧 FORZAR RE-RENDER COMPLETO: Resetear checklist items
         setChecklistItems(getChecklistData('')); // Pasar string vacío para limpiar
@@ -499,21 +474,24 @@ function App() {
         return tableRows;
     };
 
-    const generatePdf = async () => {
+    const generatePdf = async (formIdToFinalize = currentFormId) => {
         let syncError = null;
-        if (!currentFormId) {
+        if (!formIdToFinalize) {
             console.error("No hay formulario activo para finalizar.");
             setNotification({ open: true, message: 'Error: No hay formulario activo para finalizar.', severity: 'error' });
             return;
         }
         
         // << CAMBIO CLAVE: AHORA MARCAMOS EL FORMULARIO COMO FINALIZADO EN INDEXEDDB
-        await finalizeForm(currentFormId);
+        await finalizeForm(formIdToFinalize);
         
         // 🔧 MEJORA: Solo sincronizar con Firebase si hay usuario autenticado
         if (user) {
             const summaryData = {
-                formId: currentFormId,
+                formId: formIdToFinalize,
+                localFormId: formIdToFinalize,
+                userId: user.uid || user.id,
+                userEmail: user.email,
                 headerData: {
                     fechaVisita: headerData.fechaVisita, horaVisita: headerData.horaVisita,
                     espacioAtencion: headerData.espacioAtencion, entidadContratista: headerData.entidadContratista,
@@ -526,6 +504,8 @@ function App() {
                     timestamp: geoLocation?.timestamp, address: geoLocation?.address
                 },
                 tipoEspacio: tipoEspacio,
+                // Incluimos observaciones en el resumen remoto sin tocar el flujo del PDF.
+                observacionesGenerales: generalObservations || '',
                 puntuacionTotal: {
                     total: puntuacionTotal.total, promedio: puntuacionTotal.promedio, completado: puntuacionTotal.completado,
                     maxPuntosPosibles: puntuacionTotal.maxPuntosPosibles, porcentajeCumplimiento: puntuacionTotal.porcentajeCumplimiento
@@ -533,14 +513,17 @@ function App() {
                 checklistSectionsData: checklistSectionsData,
                 isComplete: true,
                 userid: user.uid || user.id,
-                userEmail: user.email,
                 lastUpdated: new Date().toISOString() 
             };
             try {
-                await saveFormSummary(summaryData); 
-                console.log('Formulario completo sincronizado con backend ID:', currentFormId);
+                const remoteDocId = await saveFormSummary(summaryData);
+                await updateFormSyncStatus(formIdToFinalize, 'synced', { remoteDocId });
+                console.log('Formulario completo sincronizado con backend ID:', formIdToFinalize);
             } catch (error) {
                 console.error('Error al sincronizar formulario completo en backend:', error);
+                await updateFormSyncStatus(formIdToFinalize, 'sync_error', {
+                    lastSyncError: error.message || 'Error al sincronizar con Firebase'
+                });
                 syncError = error; 
             }
         }
@@ -668,6 +651,14 @@ function App() {
         }
     };
 
+    const localSaveStatusConfig = {
+        dirty: { label: 'Guardado local: dirty', color: 'warning' },
+        saving: { label: 'Guardado local: saving', color: 'info' },
+        saved: { label: 'Guardado local: saved', color: 'success' },
+        error: { label: 'Guardado local: error', color: 'error' }
+    };
+    const currentLocalSaveStatus = localSaveStatusConfig[localSaveStatus] || localSaveStatusConfig.saved;
+
     // 🔧 MEJORA: Pantalla de carga simplificada (arranque instantáneo con sesión local)
     if (!authChecked) {
         return (
@@ -754,8 +745,8 @@ function App() {
                             }
                             
                             // 🔧 MEJORA: Siempre guardar antes de cambiar de vista
-                            if (formChanged && viewMode === 'form') {
-                              saveCurrentForm();
+                            if (formChanged && viewMode === 'form' && localSaveStatus !== 'saving') {
+                              void saveCurrentForm();
                             }
                             setViewMode(newValue);
                           }}
@@ -771,40 +762,56 @@ function App() {
                           )}
                         </Tabs>
 
-                        {user && (
-                            <Box sx={{ display: 'flex', alignItems: 'center', ml: 2 }}>
-                                <Typography variant="body2" sx={{ mr: 1, display: { xs: 'none', sm: 'block' } }}>
-                                    {user.email} {userRole && `(${userRole})`}
-                                </Typography>
-                                <Button
-                                    variant="outlined"
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, ml: 2, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                            <Chip
+                                size="small"
+                                color={isOnline ? 'success' : 'warning'}
+                                label={`Conexión: ${isOnline ? 'online' : 'offline'}`}
+                                variant={isOnline ? 'filled' : 'outlined'}
+                            />
+                            {viewMode === 'form' && (
+                                <Chip
                                     size="small"
-                                    onClick={async () => {
-                                        try {
-                                            // 🔧 MEJORA: Guardar antes de cerrar sesión
-                                            if (formChanged) {
-                                                saveCurrentForm();
-                                            }
+                                    color={currentLocalSaveStatus.color}
+                                    label={currentLocalSaveStatus.label}
+                                    variant={localSaveStatus === 'saved' ? 'filled' : 'outlined'}
+                                />
+                            )}
+                            {user && (
+                                <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                                    <Typography variant="body2" sx={{ mr: 1, display: { xs: 'none', sm: 'block' } }}>
+                                        {user.email} {userRole && `(${userRole})`}
+                                    </Typography>
+                                    <Button
+                                        variant="outlined"
+                                        size="small"
+                                        disabled={localSaveStatus === 'saving'}
+                                        onClick={async () => {
+                                            try {
+                                                if (formChanged && localSaveStatus !== 'saving') {
+                                                    await saveCurrentForm();
+                                                }
 
-                                            // << AÑADIR ESTA LÍNEA: Limpiar sesión local >>
-                                            await clearUserSession();
-                                            
-                                            await logout();
-                                            setUser(null);
-                                            setUserRole(null);
-                                            setViewMode('form'); 
-                                            // 🔧 MEJORA: No resetear formulario al cerrar sesión
-                                            // resetForm(); 
-                                        } catch (error) {
-                                            console.error("Error al cerrar sesión:", error);
-                                            setNotification({ open: true, message: 'Error al cerrar sesión.', severity: 'error' });
-                                        }
-                                    }}
-                                >
-                                    Cerrar sesión
-                                </Button>
-                            </Box>
-                        )}
+                                                localStorage.removeItem('headerData');
+                                                localStorage.clear();
+                                                resetForm();
+
+                                                await clearUserSession();
+                                                await logout();
+                                                setUser(null);
+                                                setUserRole(null);
+                                                setViewMode('form');
+                                            } catch (error) {
+                                                console.error("Error al cerrar sesión:", error);
+                                                setNotification({ open: true, message: 'Error al cerrar sesión.', severity: 'error' });
+                                            }
+                                        }}
+                                    >
+                                        Cerrar sesión
+                                    </Button>
+                                </Box>
+                            )}
+                        </Box>
                     </Box>
                 </Paper>
 
@@ -819,21 +826,9 @@ function App() {
                                 : 'Crea un nuevo formulario.'}
                         </Typography>
                         
-                        {/* Contenedor para los indicadores de estado */}
-                        <Box sx={{ mt: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 2.5, flexWrap: 'wrap' }}>
-                            {/* Indicador de estado de guardado */}
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                <Box sx={{ 
-                                    width: 8, 
-                                    height: 8, 
-                                    borderRadius: '50%', 
-                                    backgroundColor: formChanged ? 'warning.main' : 'success.main' 
-                                }} />
-                                <Typography variant="caption" color="text.secondary">
-                                    {formChanged ? 'Cambios pendientes de guardar' : 'Todo guardado'}
-                                </Typography>
-                            </Box>
-                        </Box>
+                        <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 1 }}>
+                            Autoguardado local activo en este dispositivo.
+                        </Typography>
 
                         {currentFormId && 
                             <Typography variant="caption" color="textSecondary" display="block" sx={{ mt: 0.5 }}>
@@ -846,9 +841,11 @@ function App() {
                 {viewMode === 'form' ? (
                     <Box sx={{ py: 4 }}>
                         <HeaderForm
+                            key={`header-${currentFormId || 'new'}`}
                             onDataChange={handleHeaderDataChange}
                             initialData={headerData}
                             onTipoEspacioChange={handleTipoEspacioChange}
+                            userName={user?.nombre || ''}
                         />
                         {(Object.keys(checklistSectionsData).length > 0 || tipoEspacio) && (
                             <Paper elevation={3} sx={{ p: 3, mb: 4, bgcolor: '#f5f5f5' }}>
@@ -861,7 +858,11 @@ function App() {
                                 </Grid>
                             </Paper>
                         )}
-                        <GeoLocationCapture onLocationChange={handleGeoLocationChange} initialData={geoLocation} />
+                        <GeoLocationCapture
+                            key={`geo-${currentFormId || 'new'}`}
+                            onLocationChange={handleGeoLocationChange}
+                            initialData={geoLocation}
+                        />
                         {checklistItems.map((section) => (
                             <ChecklistSection 
                                 key={`${section.title}-${tipoEspacio}-${currentFormId || 'new'}`} 
@@ -898,17 +899,26 @@ function App() {
                                 variant="contained" 
                                 onClick={async () => {
                                     // Aseguramos que se guarde y se obtenga un ID antes de continuar
-                                    if (formChanged || !currentFormId) {
-                                        await saveCurrentForm();
-                                    }
+                                    const activeFormId = (formChanged || !currentFormId)
+                                        ? await saveCurrentForm()
+                                        : currentFormId;
+                                    if (!activeFormId) return;
                                     // La generación del PDF ahora espera a que el guardado termine
-                                    await generatePdf();
+                                    await generatePdf(activeFormId);
                                 }}
                                 sx={{ padding: '10px 30px', fontSize: '1.1rem' }}
+                                disabled={localSaveStatus === 'saving'}
                             >
-                                Finalizar y Generar PDF
+                                {localSaveStatus === 'saving' ? 'Guardando...' : 'Finalizar y Generar PDF'}
                             </Button>
-                            <Button variant="outlined" onClick={saveCurrentForm} sx={{ padding: '10px 30px', fontSize: '1.1rem' }} disabled={!formChanged}>Guardar Localmente</Button>
+                            <Button
+                                variant="outlined"
+                                onClick={saveCurrentForm}
+                                sx={{ padding: '10px 30px', fontSize: '1.1rem' }}
+                                disabled={!formChanged || localSaveStatus === 'saving'}
+                            >
+                                {localSaveStatus === 'saving' ? 'Guardando...' : 'Guardar Localmente'}
+                            </Button>
                         </Box>
                     </Box>
                 ) : viewMode === 'saved' ? (

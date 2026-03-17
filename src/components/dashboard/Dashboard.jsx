@@ -12,6 +12,7 @@ import ItemsAlertaComponent from './ItemsAlertaComponent';
 import TendenciasTemporalesChart from './TendenciasTemporalesChart';
 import EscalafonSupervisionComponent from './EscalafonSupervisionComponent';
 import AlertasComponent from './AlertasComponent';
+import BitacoraObservaciones from './BitacoraObservaciones';
 import { getFormulariosDashboard, calcularMetricasDashboard } from '../../services/dashboardService';
 import EspaciosVisitadosChart from './EspaciosVisitadosChart';
 
@@ -24,6 +25,7 @@ const Dashboard = ({ user }) => {
   const [filtros, setFiltros] = useState({
     fechaInicio: '',
     fechaFin: '',
+    vigencia: 2026,
     tipoEspacio: 'todos',
     contratista: 'todos'
   });
@@ -256,6 +258,7 @@ const Dashboard = ({ user }) => {
                   onClick={() => handleFilterChange({
                     fechaInicio: '',
                     fechaFin: '',
+                    vigencia: 2026,
                     tipoEspacio: 'todos',
                     contratista: 'todos'
                   })}
@@ -449,7 +452,20 @@ const Dashboard = ({ user }) => {
                     <EscalafonSupervisionComponent datos={{...metricas, formularios: formularios}} />
                   </Grid>
                 </Grid>
-                
+
+                {/* --- NUEVA SECCIÓN DE OBSERVACIONES --- */}
+                <Grid container spacing={4} sx={{ my: 4 }}>
+                  <Grid item xs={12}>
+                    <Typography variant="h5" gutterBottom sx={{ mt: 2, mb: 3, fontWeight: "medium", color: "#424242" }}>
+                      Bitácora de Visitas y Observaciones
+                    </Typography>
+                    <Typography variant="body2" color="textSecondary" sx={{ mb: 3 }}>
+                      Registro detallado cualitativo y cuantitativo levantado en campo.
+                    </Typography>
+                    <BitacoraObservaciones formularios={formularios} />
+                  </Grid>
+                </Grid>
+
                 {/* Tabla de filtros aplicados */}
                 <Paper sx={{ mt: 4, p: 3 }}>
                   <Typography variant="h6" gutterBottom>
@@ -457,6 +473,13 @@ const Dashboard = ({ user }) => {
                   </Typography>
                   
                   <Grid container spacing={2}>
+                    <Grid item xs={12} sm={6} md={2}>
+                      <Typography variant="subtitle2">Vigencia:</Typography>
+                      <Typography variant="body1">
+                        {filtros.vigencia === 'todos' ? 'Todos los años' : filtros.vigencia}
+                      </Typography>
+                    </Grid>
+
                     <Grid item xs={12} sm={6} md={3}>
                       <Typography variant="subtitle2">Fecha Inicio:</Typography>
                       <Typography variant="body1">
