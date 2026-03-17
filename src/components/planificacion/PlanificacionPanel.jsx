@@ -200,6 +200,7 @@ const PlanificacionPanel = ({ user }) => {
   const [error, setError] = useState('');
   const [dialogError, setDialogError] = useState('');
   const [alertaR1, setAlertaR1] = useState(null);
+  const [alertaR1b, setAlertaR1b] = useState(null);
   const [alertaR3, setAlertaR3] = useState(null);
   const [formValues, setFormValues] = useState(emptyForm);
   const validationRunRef = useRef(0);
@@ -252,6 +253,7 @@ const PlanificacionPanel = ({ user }) => {
   useEffect(() => {
     if (!dialogOpen || !formValues.espacio?.id || !formValues.fecha) {
       setAlertaR1(null);
+      setAlertaR1b(null);
       setAlertaR3(null);
       setValidatingRules(false);
       return;
@@ -263,6 +265,7 @@ const PlanificacionPanel = ({ user }) => {
     setValidatingRules(true);
     setDialogError('');
     setAlertaR1(null);
+    setAlertaR1b(null);
     setAlertaR3(null);
 
     Promise.all([
@@ -276,6 +279,7 @@ const PlanificacionPanel = ({ user }) => {
 
         setAlertaR3(duplicado.bloqueado ? duplicado : null);
         setAlertaR1(choque.hayChoque ? choque : null);
+        setAlertaR1b(choque.visitaPrevia ? choque.visitaPrevia : null);
       })
       .catch((validationError) => {
         if (ignore || validationRunRef.current !== currentRun) {
@@ -306,6 +310,7 @@ const PlanificacionPanel = ({ user }) => {
     setFormValues({ ...emptyForm });
     setDialogError('');
     setAlertaR1(null);
+    setAlertaR1b(null);
     setAlertaR3(null);
     setValidatingRules(false);
   };
@@ -596,7 +601,7 @@ const PlanificacionPanel = ({ user }) => {
                                         <Divider />
 
                                         <Typography variant="body2">
-                                          {tarea.userEmail || 'Sin usuario asignado'}
+                                          {tarea.userDisplayName || tarea.userEmail || 'Sin usuario asignado'}
                                         </Typography>
 
                                         {tarea.notas && (
@@ -699,8 +704,16 @@ const PlanificacionPanel = ({ user }) => {
 
             {alertaR1?.hayChoque && (
               <Alert severity="warning">
-                {alertaR1.tareasConflicto.map((tarea) => tarea.userEmail).join(', ')}
+                {alertaR1.tareasConflicto.map((tarea) => tarea.userDisplayName || tarea.userEmail).join(', ')}
                 {' '}ya tiene programada una visita a este espacio el {formValues.fecha}. Puedes continuar si deseas.
+              </Alert>
+            )}
+
+            {alertaR1b && (
+              <Alert severity="info">
+                Este espacio ya fue visitado el {alertaR1b.fechaVisita} por {alertaR1b.apoyoSupervision || alertaR1b.userEmail}
+                {alertaR1b.porcentajeCumplimiento ? ` (${alertaR1b.porcentajeCumplimiento}% cumplimiento)` : ''}.
+                Puedes continuar si necesitas otra visita.
               </Alert>
             )}
 
