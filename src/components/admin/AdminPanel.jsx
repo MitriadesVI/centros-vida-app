@@ -32,7 +32,7 @@ import {
 } from '@mui/material';
 import { collection, getDocs, doc, getDoc, setDoc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../../firebase/config';
-import { ROLES, changeUserRole, getUserRole } from '../../services/userRoleService';
+import { ROLES, changeUserRole, getUserRole, getUserProfile, updateUserProfile } from '../../services/userRoleService';
 import { register } from '../../services/authService';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
@@ -56,9 +56,11 @@ const AdminPanel = ({ user }) => {
   const [selectedUser, setSelectedUser] = useState(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [newRole, setNewRole] = useState('');
+  const [editName, setEditName] = useState('');
   
   // Estados para registro de nuevo usuario
   const [registerDialogOpen, setRegisterDialogOpen] = useState(false);
+  const [newUserName, setNewUserName] = useState('');
   const [newUserEmail, setNewUserEmail] = useState('');
   const [newUserPassword, setNewUserPassword] = useState('');
   const [newUserRole, setNewUserRole] = useState(ROLES.APOYO);
@@ -95,8 +97,10 @@ const AdminPanel = ({ user }) => {
               
               // Si el usuario tiene un rol (es un usuario autorizado)
               if (role !== null) {
+                const profile = await getUserProfile(userDoc.id);
                 usersData.push({
                   id: userDoc.id,
+                  nombre: profile?.nombre || '',
                   email: userData.email || 'No disponible',
                   role: role,
                   lastLogin: userData.lastLogin ? new Date(userData.lastLogin).toLocaleString() : 'Nunca',
@@ -141,6 +145,7 @@ const AdminPanel = ({ user }) => {
   const handleOpenDialog = (user) => {
     setSelectedUser(user);
     setNewRole(user.role);
+    setEditName(user.nombre || '');
     setDialogOpen(true);
   };
 
@@ -151,11 +156,11 @@ const AdminPanel = ({ user }) => {
 
   const handleChangeRole = async () => {
     try {
-      await changeUserRole(selectedUser.id, newRole);
-      
+      await updateUserProfile(selectedUser.id, newRole, editName);
+
       // Actualizar el estado local
-      setUsers(users.map(u => 
-        u.id === selectedUser.id ? { ...u, role: newRole } : u
+      setUsers(users.map(u =>
+        u.id === selectedUser.id ? { ...u, role: newRole, nombre: editName } : u
       ));
       
       setSuccess(`Rol actualizado correctamente para ${selectedUser.email}`);
@@ -171,6 +176,7 @@ const AdminPanel = ({ user }) => {
   
   const handleOpenRegisterDialog = () => {
     setRegisterDialogOpen(true);
+    setNewUserName('');
     setNewUserEmail('');
     setNewUserPassword('');
     setNewUserRole(ROLES.APOYO);
@@ -201,17 +207,19 @@ const AdminPanel = ({ user }) => {
       
       // Crear documento en Firestore con rol y datos adicionales
       const userRef = doc(db, 'users', userCredential.uid);
-      await setDoc(userRef, { 
+      await setDoc(userRef, {
+        nombre: newUserName,
         email: newUserEmail,
         role: newUserRole,
         created: new Date().toISOString(),
-        createdBy: user.uid, // ID del administrador que lo creó
+        createdBy: user.uid,
         status: 'active'
       });
       
       // Añadir el nuevo usuario a la lista
       setUsers([...users, {
         id: userCredential.uid,
+        nombre: newUserName,
         email: newUserEmail,
         role: newUserRole,
         lastLogin: 'Nunca',
@@ -481,14 +489,24 @@ const AdminPanel = ({ user }) => {
       
       {/* TODOS tus diálogos existentes (sin cambios) */}
       
-      {/* Diálogo para cambiar rol */}
+      {/* Diálogo para editar usuario */}
       <Dialog open={dialogOpen} onClose={handleCloseDialog}>
-        <DialogTitle>Cambiar Rol de Usuario</DialogTitle>
+        <DialogTitle>Editar Usuario</DialogTitle>
         <DialogContent>
           <DialogContentText>
-            Cambiar el rol del usuario: <strong>{selectedUser?.email}</strong>
+            Editando usuario: <strong>{selectedUser?.email}</strong>
           </DialogContentText>
-          <FormControl fullWidth sx={{ mt: 2 }}>
+          <TextField
+            margin="dense"
+            label="Nombre Completo"
+            type="text"
+            fullWidth
+            variant="outlined"
+            value={editName}
+            onChange={(e) => setEditName(e.target.value)}
+            sx={{ mb: 2, mt: 2 }}
+          />
+          <FormControl fullWidth sx={{ mt: 1 }}>
             <InputLabel id="role-select-label">Rol</InputLabel>
             <Select
               labelId="role-select-label"
@@ -527,13 +545,24 @@ const AdminPanel = ({ user }) => {
           <TextField
             autoFocus
             margin="dense"
+            label="Nombre Completo"
+            type="text"
+            fullWidth
+            variant="outlined"
+            value={newUserName}
+            onChange={(e) => setNewUserName(e.target.value)}
+            sx={{ mb: 2, mt: 2 }}
+          />
+
+          <TextField
+            margin="dense"
             label="Correo Electrónico"
             type="email"
             fullWidth
             variant="outlined"
             value={newUserEmail}
             onChange={(e) => setNewUserEmail(e.target.value)}
-            sx={{ mb: 2, mt: 2 }}
+            sx={{ mb: 2 }}
           />
           
           <TextField

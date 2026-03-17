@@ -57,7 +57,20 @@ import {
             incluir = false;
           }
         }
-        
+
+        // Filtro por vigencia (si el doc no tiene el campo, lo infiere de fechaVisita)
+        if (filtros.vigencia && filtros.vigencia !== 'todos') {
+          let añoDocumento = data.vigencia;
+
+          if (!añoDocumento && data.fechaVisita) {
+            añoDocumento = new Date(data.fechaVisita).getFullYear();
+          }
+
+          if (Number(añoDocumento) !== Number(filtros.vigencia)) {
+            incluir = false;
+          }
+        }
+
         // Si pasa todos los filtros, incluir en resultados
         if (incluir) {
           // Convertir timestamp a fecha si existe

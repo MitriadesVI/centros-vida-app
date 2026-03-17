@@ -1,14 +1,45 @@
 import { 
     collection, 
-    addDoc, 
+    addDoc,
+    doc,
+    getDoc,
     getDocs, 
     query, 
+    setDoc,
     where, 
     orderBy, 
     serverTimestamp 
   } from 'firebase/firestore';
   import { db } from '../firebase/config';
   import { getCurrentUser } from './authService';
+
+  const deriveVigencia = (fechaVisita) => {
+    const yearFromString = typeof fechaVisita === 'string'
+      ? Number(fechaVisita.slice(0, 4))
+      : NaN;
+
+    if (!Number.isNaN(yearFromString) && yearFromString > 1900) {
+      return yearFromString;
+    }
+
+    const parsedDate = fechaVisita ? new Date(fechaVisita) : null;
+    if (parsedDate instanceof Date && !Number.isNaN(parsedDate?.getTime?.())) {
+      return parsedDate.getFullYear();
+    }
+
+    return new Date().getFullYear();
+  };
+
+  const buildRemoteFormSummaryId = (userId, localFormId) => {
+    if (!userId || localFormId === null || localFormId === undefined || localFormId === '') {
+      throw new Error('No se pudo generar el ID remoto del formulario');
+    }
+
+    const normalizedUserId = String(userId).replace(/\//g, '_');
+    const normalizedLocalFormId = String(localFormId).replace(/\//g, '_');
+
+    return `${normalizedUserId}_${normalizedLocalFormId}`;
+  };
   
   // Guardar resumen del formulario en Firestore
   export const saveFormSummary = async (formData) => {
@@ -19,6 +50,17 @@ import {
         return null;
       }
       
+      const currentUser = getCurrentUser();
+      const effectiveUserId = formData.userId || formData.userid || currentUser?.uid || 'anonymous';
+      const effectiveUserEmail = formData.userEmail || currentUser?.email || 'anonymous';
+      const localFormId = formData.localFormId ?? formData.formId ?? null;
+      const observacionesGenerales = formData.observacionesGenerales || formData.generalObservations || '';
+      const hasObservaciones = observacionesGenerales.trim().length > 0;
+      const vigencia = deriveVigencia(formData.headerData?.fechaVisita);
+      const remoteFormId = localFormId ? buildRemoteFormSummaryId(effectiveUserId, localFormId) : null;
+      const docRef = remoteFormId ? doc(db, 'formSummaries', remoteFormId) : null;
+      const existingDoc = docRef ? await getDoc(docRef) : null;
+
       // Extraer y organizar datos de componentes
       const componenteTecnico = {};
       const componenteNutricion = {};
@@ -143,20 +185,35 @@ import {
         espacioAtencion: formData.headerData?.espacioAtencion || '',
         tipoEspacio: formData.tipoEspacio || '',
         pmAsistentes: parseInt(formData.headerData?.pmAsistentes || 0, 10),
+        observacionesGenerales,
+        vigencia,
+        hasObservaciones,
         
         // Metadatos
-        createdAt: serverTimestamp(), // Timestamp del servidor
-        userId: getCurrentUser()?.uid || 'anonymous',
-        userEmail: getCurrentUser()?.email || 'anonymous',
-        localFormId: formData.formId || null,
+        userId: effectiveUserId,
+        userEmail: effectiveUserEmail,
+        localFormId: localFormId,
+        remoteFormId: remoteFormId,
         isComplete: formData.isComplete || false,
-        isAutoSave: formData.isAutoSave || false
+        isAutoSave: formData.isAutoSave || false,
+        updatedAt: serverTimestamp()
       };
-      
-      // Añadir a la colección "formSummaries"
-      const docRef = await addDoc(collection(db, 'formSummaries'), formSummary);
-      
-      return docRef.id;
+
+      // Mantenemos el guardado remoto idempotente cuando existe un ID local estable.
+      if (docRef) {
+        // Conservamos createdAt para no alterar consultas existentes del dashboard.
+        if (!existingDoc.exists()) {
+          formSummary.createdAt = serverTimestamp();
+        }
+
+        await setDoc(docRef, formSummary, { merge: true });
+        return remoteFormId;
+      }
+
+      // Fallback legado: si no hay ID local, seguimos permitiendo guardar sin romper el flujo.
+      formSummary.createdAt = serverTimestamp();
+      const fallbackDocRef = await addDoc(collection(db, 'formSummaries'), formSummary);
+      return fallbackDocRef.id;
     } catch (error) {
       console.error('Error al guardar resumen del formulario:', error);
       throw error;

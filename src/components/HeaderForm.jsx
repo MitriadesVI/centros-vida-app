@@ -1,26 +1,30 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import '../styles/forms.css';
 import './HeaderForm.css';
 import contratistas from '../data/contratistas'; // Importamos los datos de contratistas
 
-const HeaderForm = ({ onDataChange, initialData = {}, onTipoEspacioChange }) => {
+const HeaderForm = ({ onDataChange, initialData = {}, onTipoEspacioChange, userName = '' }) => {
     const [formData, setFormData] = useState(() => {
-        // Si recibimos datos iniciales, los usamos; de lo contrario, intentamos cargar de localStorage
         if (Object.keys(initialData).length > 0) {
+            if (!initialData.apoyoSupervision && userName) {
+                return { ...initialData, apoyoSupervision: userName };
+            }
             return initialData;
         }
-        
+
         const savedData = localStorage.getItem('headerData');
         if (savedData) {
             try {
                 const parsedData = JSON.parse(savedData);
-                return typeof parsedData === 'object' && parsedData !== null ? parsedData : {};
+                if (typeof parsedData === 'object' && parsedData !== null) {
+                    if (userName) parsedData.apoyoSupervision = userName;
+                    return parsedData;
+                }
             } catch (error) {
-                console.error("Error parsing headerData from localStorage:", error);
-                return {};
+                console.error("Error parsing headerData:", error);
             }
         }
-        return {};
+        return { apoyoSupervision: userName || '' };
     });
 
     // Estado para el contratista seleccionado
@@ -44,7 +48,7 @@ const HeaderForm = ({ onDataChange, initialData = {}, onTipoEspacioChange }) => 
                 horaVisita: currentTime
             }));
         }
-    }, [initialData, formData]);
+    }, [initialData, formData.fechaVisita, formData.horaVisita]);
 
     // Efecto para notificar cuando cambia el tipo de espacio
     useEffect(() => {
@@ -64,9 +68,13 @@ const HeaderForm = ({ onDataChange, initialData = {}, onTipoEspacioChange }) => 
         };
     }, [formData]);
 
-    // Efecto para notificar al componente padre de los cambios
+    const prevDataRef = useRef();
     useEffect(() => {
-        onDataChange(formData);
+        const currentDataStr = JSON.stringify(formData);
+        if (prevDataRef.current !== currentDataStr) {
+            onDataChange(formData);
+            prevDataRef.current = currentDataStr;
+        }
     }, [formData, onDataChange]);
 
     const handleChange = (e) => {
@@ -109,8 +117,8 @@ const HeaderForm = ({ onDataChange, initialData = {}, onTipoEspacioChange }) => 
 
         const clearedData = {
             fechaVisita: currentDate,
-            horaVisita: currentTime
-            // 🔧 NO incluir tipoEspacio para que se resetee completamente
+            horaVisita: currentTime,
+            apoyoSupervision: userName || ''
         };
 
         setFormData(clearedData);

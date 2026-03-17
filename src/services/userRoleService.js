@@ -104,6 +104,22 @@ export const isUserAuthorized = async (userId) => {
   return role !== null;
 };
 
+// Actualizar rol y nombre de un usuario
+export const updateUserProfile = async (uid, role, nombre) => {
+  try {
+    const userRef = doc(db, 'users', uid);
+    await updateDoc(userRef, {
+      role,
+      nombre,
+      updatedAt: new Date().toISOString()
+    });
+    return true;
+  } catch (error) {
+    console.error('Error al actualizar perfil del usuario:', error);
+    throw error;
+  }
+};
+
 // Cambiar el rol de un usuario (solo para administradores)
 export const changeUserRole = async (targetUserId, newRole) => {
   console.log("Cambiando rol para usuario:", targetUserId, "Nuevo rol:", newRole);
@@ -170,9 +186,26 @@ export const assignRoleToNewUser = async (userId, email, role = ROLES.APOYO) => 
   }
 };
 
+// Obtener el perfil completo del usuario (rol + nombre + resto de campos)
+export const getUserProfile = async (uid) => {
+  try {
+    const userRef = doc(db, 'users', uid);
+    const docSnap = await getDoc(userRef);
+    if (docSnap.exists()) {
+      return docSnap.data();
+    }
+    return null;
+  } catch (error) {
+    console.error('Error al obtener perfil del usuario:', error);
+    return null;
+  }
+};
+
 export default {
   ROLES,
   getUserRole,
+  getUserProfile,
+  updateUserProfile,
   isUserAuthorized,
   changeUserRole,
   updateLastLogin,

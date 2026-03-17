@@ -13,6 +13,21 @@ db.version(2).stores({
   // Por ahora, solo actualizamos la versión.
 });
 
+// Agregamos metadatos de sincronización local sin cambiar la estructura principal.
+db.version(3).stores({
+  forms: '++id, status, syncStatus, lastUpdated, remoteDocId',
+  userSession: '&id'
+}).upgrade(async (tx) => {
+  await tx.table('forms').toCollection().modify((form) => {
+    if (!form.syncStatus) {
+      form.syncStatus = form.status === 'sincronizado' ? 'synced' : 'pending_sync';
+    }
+    if (!('remoteDocId' in form)) form.remoteDocId = null;
+    if (!('lastSyncedAt' in form)) form.lastSyncedAt = null;
+    if (!('lastSyncError' in form)) form.lastSyncError = null;
+  });
+});
+
 /**
  * Guarda o actualiza un formulario en la base de datos local.
  * Siempre se guarda como 'borrador'.
@@ -21,10 +36,14 @@ db.version(2).stores({
  * @returns {string} El ID del formulario guardado.
  */
 export const saveFormAsDraft = async (formData, existingId) => {
+  const existingForm = existingId ? await db.forms.get(existingId) : null;
   const dataToSave = {
+    ...(existingForm || {}),
+    ...formData,
     status: 'borrador',
+    syncStatus: 'pending_sync',
     lastUpdated: new Date().toISOString(),
-    ...formData
+    lastSyncError: null
   };
 
   if (existingId) {
@@ -70,7 +89,38 @@ export const deleteForm = async (id) => {
  * @param {string} id - El ID del formulario a finalizar.
  */
 export const finalizeForm = async (id) => {
-  await db.forms.update(id, { status: 'finalizado' });
+  await db.forms.update(id, {
+    status: 'finalizado',
+    syncStatus: 'pending_sync',
+    lastUpdated: new Date().toISOString(),
+    lastSyncError: null
+  });
+};
+
+/**
+ * Actualiza el estado de sincronización remota de un formulario local.
+ * @param {string|number} id - El ID local del formulario.
+ * @param {'pending_sync'|'synced'|'sync_error'} syncStatus - Estado de sincronización.
+ * @param {object} extraData - Metadatos opcionales de sincronización.
+ */
+export const updateFormSyncStatus = async (id, syncStatus, extraData = {}) => {
+  if (!id) return;
+
+  const updateData = {
+    syncStatus,
+    ...extraData
+  };
+
+  if (syncStatus === 'synced') {
+    updateData.lastSyncedAt = new Date().toISOString();
+    updateData.lastSyncError = null;
+  }
+
+  if (syncStatus === 'pending_sync' && !('lastSyncError' in extraData)) {
+    updateData.lastSyncError = null;
+  }
+
+  await db.forms.update(id, updateData);
 };
 
 /**
