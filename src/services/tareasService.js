@@ -186,11 +186,15 @@ export const detectarChoque = async (espacioId, fechaProgramada) => {
     return { hayChoque: false, tareasConflicto: [], visitaPrevia: null };
   }
 
-  // R1: Buscar tareas de otros usuarios para el mismo espacio y fecha
+  const { lunes, domingo } = obtenerRangoSemana(fechaProgramada);
+
+  // R1: Buscar tareas de otros usuarios para el mismo espacio durante la misma semana
   const q = query(
     collection(db, TAREAS_COLLECTION),
     where('espacioId', '==', espacioId),
-    where('fechaProgramada', '==', fechaProgramada)
+    where('fechaProgramada', '>=', lunes),
+    where('fechaProgramada', '<=', domingo),
+    orderBy('fechaProgramada', 'asc')
   );
 
   const snapshot = await getDocs(q);
