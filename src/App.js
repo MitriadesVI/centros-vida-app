@@ -14,6 +14,7 @@ import Login from './components/Login';
 import Dashboard from './components/dashboard/Dashboard'; 
 import AdminPanel from './components/admin/AdminPanel'; // << NUEVA IMPORTACIÓN
 import CatalogosPanel from './components/catalogos/CatalogosPanel';
+import PlanificacionPanel from './components/planificacion/PlanificacionPanel';
 
 // Importación de los logos en base64
 import { HEADER_LOGO, FOOTER_BANNER } from './assets/logoImages.js';
@@ -477,6 +478,7 @@ function App() {
 
     const generatePdf = async (formIdToFinalize = currentFormId) => {
         let syncError = null;
+        let remoteDocId = null;
         if (!formIdToFinalize) {
             console.error("No hay formulario activo para finalizar.");
             setNotification({ open: true, message: 'Error: No hay formulario activo para finalizar.', severity: 'error' });
@@ -517,9 +519,25 @@ function App() {
                 lastUpdated: new Date().toISOString() 
             };
             try {
-                const remoteDocId = await saveFormSummary(summaryData);
+                remoteDocId = await saveFormSummary(summaryData);
                 await updateFormSyncStatus(formIdToFinalize, 'synced', { remoteDocId });
                 console.log('Formulario completo sincronizado con backend ID:', formIdToFinalize);
+
+                try {
+                    const { buscarTareaPendienteParaVisita, completarTarea } = await import('./services/tareasService');
+                    const tareaId = await buscarTareaPendienteParaVisita(
+                        headerData.espacioAtencion,
+                        headerData.fechaVisita,
+                        user.uid
+                    );
+
+                    if (tareaId) {
+                        await completarTarea(tareaId, remoteDocId || formIdToFinalize);
+                        console.log('Tarea cerrada automáticamente:', tareaId);
+                    }
+                } catch (taskClosingError) {
+                    console.warn('No se pudo cerrar tarea automáticamente:', taskClosingError);
+                }
             } catch (error) {
                 console.error('Error al sincronizar formulario completo en backend:', error);
                 await updateFormSyncStatus(formIdToFinalize, 'sync_error', {
@@ -776,6 +794,7 @@ function App() {
                           {(userRole === ROLES.ADMIN || userRole === ROLES.SUPERVISOR) && (
                             <Tab label="Catálogos" value="catalogos" />
                           )}
+                          <Tab label="Planificación" value="planificacion" />
                         </Tabs>
 
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, ml: 2, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
@@ -945,6 +964,8 @@ function App() {
                     <AdminPanel user={user} />
                 ) : viewMode === 'catalogos' ? (
                     <CatalogosPanel user={user} />
+                ) : viewMode === 'planificacion' ? (
+                    <PlanificacionPanel user={user} />
                 ) : null}
 
                 <Snackbar open={notification.open} autoHideDuration={6000} onClose={handleCloseNotification} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
