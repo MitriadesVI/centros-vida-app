@@ -23,6 +23,30 @@ const ESTADOS = {
   CANCELADA: 'cancelada'
 };
 
+const CATEGORIAS = {
+  SUPERVISION: 'supervision',
+  VISITA_PQRDS: 'visita_pqrds',
+  VISITA_FUNDACARIBE: 'visita_fundacaribe',
+  VISITA_IDI: 'visita_idi',
+  ACTIVIDAD_2030: 'actividad_2030',
+  ACTIVIDAD_CUIDADORES: 'actividad_cuidadores',
+  ACTIVIDAD_FRAGILIDAD: 'actividad_fragilidad',
+  ALCALDIA: 'alcaldia',
+  OTRA: 'otra'
+};
+
+const CATEGORIAS_LABELS = {
+  [CATEGORIAS.SUPERVISION]: 'Supervisión CDV',
+  [CATEGORIAS.VISITA_PQRDS]: 'Visita PQRDS',
+  [CATEGORIAS.VISITA_FUNDACARIBE]: 'Visita Fundacaribe',
+  [CATEGORIAS.VISITA_IDI]: 'Visita IDI',
+  [CATEGORIAS.ACTIVIDAD_2030]: 'Actividad 2030',
+  [CATEGORIAS.ACTIVIDAD_CUIDADORES]: 'Actividad Cuidadores',
+  [CATEGORIAS.ACTIVIDAD_FRAGILIDAD]: 'Actividad Fragilidad',
+  [CATEGORIAS.ALCALDIA]: 'Alcaldía',
+  [CATEGORIAS.OTRA]: 'Otra actividad'
+};
+
 const normalizeName = (value) => String(value || '').trim().toLowerCase();
 
 const parseDateString = (fechaStr) => {
@@ -128,14 +152,23 @@ const getOwnedTask = async (tareaId) => {
 export const crearTarea = async (datosTarea) => {
   const currentUser = requireCurrentUser();
 
-  if (!datosTarea?.espacioId || !datosTarea?.espacioNombre || !datosTarea?.fechaProgramada) {
-    throw new Error('Faltan datos obligatorios para crear la tarea');
+  const categoria = datosTarea.categoria || CATEGORIAS.SUPERVISION;
+  const isSupervision = categoria === CATEGORIAS.SUPERVISION;
+
+  if (!datosTarea?.fechaProgramada) {
+    throw new Error('La fecha programada es obligatoria');
+  }
+
+  if (isSupervision && (!datosTarea?.espacioId || !datosTarea?.espacioNombre)) {
+    throw new Error('Para supervisiones, el espacio es obligatorio');
   }
 
   const payload = {
-    espacioId: datosTarea.espacioId,
-    espacioNombre: String(datosTarea.espacioNombre).trim(),
+    categoria,
+    espacioId: datosTarea.espacioId || '',
+    espacioNombre: isSupervision ? String(datosTarea.espacioNombre).trim() : '',
     tipoEspacio: datosTarea.tipoEspacio || '',
+    descripcion: String(datosTarea.descripcion || '').trim(),
     fechaProgramada: datosTarea.fechaProgramada,
     userId: currentUser.uid,
     userEmail: currentUser.email || '',
@@ -413,7 +446,7 @@ export const editarNotasTarea = async (tareaId, notas) => {
   });
 };
 
-export { ESTADOS };
+export { ESTADOS, CATEGORIAS, CATEGORIAS_LABELS };
 
 const tareasService = {
   crearTarea,
@@ -425,7 +458,9 @@ const tareasService = {
   completarTarea,
   buscarTareaPendienteParaVisita,
   editarNotasTarea,
-  ESTADOS
+  ESTADOS,
+  CATEGORIAS,
+  CATEGORIAS_LABELS
 };
 
 export default tareasService;

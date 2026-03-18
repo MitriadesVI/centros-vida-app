@@ -40,6 +40,8 @@ import * as XLSX from 'xlsx';
 import { getEspacios, getEspaciosFromCache } from '../../services/catalogService';
 import {
   ESTADOS,
+  CATEGORIAS,
+  CATEGORIAS_LABELS,
   cancelarTarea,
   completarTarea,
   crearTarea,
@@ -61,6 +63,23 @@ const ESTADO_CONFIG = {
 };
 
 const VENCIDA_CONFIG = { label: 'Vencida', color: 'error' };
+
+const CATEGORIA_COLORS = {
+  [CATEGORIAS.SUPERVISION]: '#1976d2',
+  [CATEGORIAS.VISITA_PQRDS]: '#7b1fa2',
+  [CATEGORIAS.VISITA_FUNDACARIBE]: '#00838f',
+  [CATEGORIAS.VISITA_IDI]: '#ef6c00',
+  [CATEGORIAS.ACTIVIDAD_2030]: '#2e7d32',
+  [CATEGORIAS.ACTIVIDAD_CUIDADORES]: '#c62828',
+  [CATEGORIAS.ACTIVIDAD_FRAGILIDAD]: '#ad1457',
+  [CATEGORIAS.ALCALDIA]: '#37474f',
+  [CATEGORIAS.OTRA]: '#757575'
+};
+
+const CATEGORIAS_OPTIONS = Object.entries(CATEGORIAS_LABELS).map(([value, label]) => ({
+  value,
+  label
+}));
 
 const normalizeDate = (value) => {
   if (typeof value !== 'string' || value.length < 10) {
@@ -186,9 +205,11 @@ const getTaskChipLabel = (item) => {
 };
 
 const emptyForm = {
+  categoria: CATEGORIAS.SUPERVISION,
   espacio: null,
   fecha: '',
-  notas: ''
+  notas: '',
+  descripcion: ''
 };
 
 const getTodayString = () => formatDateString(new Date());
@@ -266,7 +287,9 @@ const PlanificacionPanel = ({ user }) => {
   }, [refreshPanel, semanaActual]);
 
   useEffect(() => {
-    if (!dialogOpen || !formValues.espacio?.id || !formValues.fecha) {
+    const isSupervision = formValues.categoria === CATEGORIAS.SUPERVISION;
+
+    if (!dialogOpen || !formValues.fecha || (isSupervision && !formValues.espacio?.id)) {
       setAlertaR1(null);
       setAlertaR1b(null);
       setAlertaR3(null);
@@ -283,10 +306,17 @@ const PlanificacionPanel = ({ user }) => {
     setAlertaR1b(null);
     setAlertaR3(null);
 
-    Promise.all([
-      validarDuplicadoSemanal(formValues.espacio.id, formValues.fecha),
-      detectarChoque(formValues.espacio.id, formValues.fecha)
-    ])
+    const validationPromise = isSupervision
+      ? Promise.all([
+          validarDuplicadoSemanal(formValues.espacio.id, formValues.fecha),
+          detectarChoque(formValues.espacio.id, formValues.fecha)
+        ])
+      : Promise.resolve([
+          { bloqueado: false, tareaExistente: null },
+          { hayChoque: false, tareasConflicto: [], visitaPrevia: null }
+        ]);
+
+    validationPromise
       .then(([duplicado, choque]) => {
         if (ignore || validationRunRef.current !== currentRun) {
           return;
@@ -313,10 +343,15 @@ const PlanificacionPanel = ({ user }) => {
     return () => {
       ignore = true;
     };
-  }, [dialogOpen, formValues.espacio?.id, formValues.fecha]);
+  }, [dialogOpen, formValues.categoria, formValues.espacio?.id, formValues.fecha]);
 
   const tareasPorFecha = groupTasksByDate(tareas);
-  const guardadoBloqueado = saving || validatingRules || !formValues.espacio || !formValues.fecha || Boolean(alertaR3?.bloqueado);
+  const isSupervisionForm = formValues.categoria === CATEGORIAS.SUPERVISION;
+  const guardadoBloqueado = saving
+    || (isSupervisionForm && validatingRules)
+    || (isSupervisionForm && !formValues.espacio)
+    || !formValues.fecha
+    || (isSupervisionForm && Boolean(alertaR3?.bloqueado));
   const totalVisitados = espaciosSinVisitar?.visitados?.length || 0;
   const totalEspacios = espaciosSinVisitar?.totalEspacios || 0;
   const resumenDefaultExpanded = typeof window === 'undefined' ? true : window.innerWidth > 768;
@@ -332,7 +367,7 @@ const PlanificacionPanel = ({ user }) => {
   };
 
   const handleCreateTask = async () => {
-    if (guardadoBloqueado || !formValues.espacio) {
+    if (guardadoBloqueado) {
       return;
     }
 
@@ -341,11 +376,13 @@ const PlanificacionPanel = ({ user }) => {
 
     try {
       await crearTarea({
-        espacioId: formValues.espacio.id,
-        espacioNombre: formValues.espacio.nombre,
-        tipoEspacio: formValues.espacio.tipo,
+        categoria: formValues.categoria,
+        espacioId: formValues.espacio?.id || '',
+        espacioNombre: formValues.espacio?.nombre || '',
+        tipoEspacio: formValues.espacio?.tipo || '',
         fechaProgramada: formValues.fecha,
-        notas: formValues.notas
+        notas: formValues.notas,
+        descripcion: formValues.descripcion
       });
 
       const targetWeek = buildWeekRange(formValues.fecha);
@@ -402,9 +439,11 @@ const PlanificacionPanel = ({ user }) => {
 
     const rows = sortTareas(tareas).map((tarea) => ({
       Fecha: tarea.fechaProgramada || '',
+      Categoría: CATEGORIAS_LABELS[tarea.categoria || CATEGORIAS.SUPERVISION] || 'Supervisión CDV',
       Espacio: tarea.espacioNombre || '',
+      Descripción: tarea.descripcion || '',
       Tipo: TIPO_LABELS[tarea.tipoEspacio] || tarea.tipoEspacio || '',
-      Usuario: tarea.userEmail || '',
+      Usuario: tarea.userDisplayName || tarea.userEmail || '',
       Estado: ESTADO_CONFIG[tarea.estado]?.label || tarea.estado || '',
       Notas: tarea.notas || ''
     }));
@@ -446,7 +485,14 @@ const PlanificacionPanel = ({ user }) => {
                 setAlertaR1(null);
                 setAlertaR1b(null);
                 setAlertaR3(null);
-                setFormValues({ espacio: espacioMatch || item, fecha: '', notas: '' });
+                setFormValues({
+                  ...emptyForm,
+                  categoria: CATEGORIAS.SUPERVISION,
+                  espacio: espacioMatch || item,
+                  fecha: '',
+                  notas: '',
+                  descripcion: ''
+                });
                 setDialogOpen(true);
               } : undefined}
             />
@@ -614,6 +660,7 @@ const PlanificacionPanel = ({ user }) => {
                           ) : (
                             <Stack spacing={1.25}>
                               {tareasDia.map((tarea) => {
+                                const categoria = tarea.categoria || CATEGORIAS.SUPERVISION;
                                 const estadoConfig = getEstadoDisplay(tarea);
                                 const isVencida = tarea.estado === ESTADOS.PENDIENTE && tarea.fechaProgramada < getTodayString();
                                 const isOwnTask = tarea.userId === user.uid;
@@ -634,14 +681,32 @@ const PlanificacionPanel = ({ user }) => {
                                       <Stack spacing={1}>
                                         <Stack direction="row" justifyContent="space-between" spacing={1}>
                                           <Typography variant="subtitle2" fontWeight={700}>
-                                            {tarea.espacioNombre}
+                                            {tarea.espacioNombre || tarea.descripcion || CATEGORIAS_LABELS[categoria] || 'Sin título'}
                                           </Typography>
                                           <Chip size="small" color={estadoConfig.color} label={estadoConfig.label} />
                                         </Stack>
 
-                                        <Typography variant="body2" color="text.secondary">
-                                          {TIPO_LABELS[tarea.tipoEspacio] || tarea.tipoEspacio || 'Tipo no definido'}
+                                        <Typography
+                                          variant="body2"
+                                          sx={{
+                                            color: CATEGORIA_COLORS[categoria] || CATEGORIA_COLORS[CATEGORIAS.SUPERVISION],
+                                            fontWeight: 500
+                                          }}
+                                        >
+                                          {CATEGORIAS_LABELS[categoria] || CATEGORIAS_LABELS[CATEGORIAS.SUPERVISION]}
                                         </Typography>
+
+                                        {categoria === CATEGORIAS.SUPERVISION && (
+                                          <Typography variant="body2" color="text.secondary">
+                                            {TIPO_LABELS[tarea.tipoEspacio] || tarea.tipoEspacio || ''}
+                                          </Typography>
+                                        )}
+
+                                        {tarea.descripcion && (
+                                          <Typography variant="body2" color="text.secondary">
+                                            {tarea.descripcion}
+                                          </Typography>
+                                        )}
 
                                         <Divider />
 
@@ -713,22 +778,56 @@ const PlanificacionPanel = ({ user }) => {
         <DialogTitle>Nueva Tarea</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ pt: 1 }}>
-            <Autocomplete
-              options={espaciosCatalogo}
-              value={formValues.espacio}
-              isOptionEqualToValue={(option, value) => option.id === value.id}
-              getOptionLabel={(option) => option?.nombre || ''}
-              onChange={(_, newValue) => {
-                setFormValues((prev) => ({ ...prev, espacio: newValue }));
+            <TextField
+              select
+              label="Tipo de actividad"
+              value={formValues.categoria}
+              onChange={(event) => {
+                const newCategoria = event.target.value;
+                setFormValues((prev) => ({
+                  ...prev,
+                  categoria: newCategoria,
+                  espacio: newCategoria === CATEGORIAS.SUPERVISION ? prev.espacio : null,
+                  descripcion: newCategoria === CATEGORIAS.SUPERVISION ? '' : prev.descripcion
+                }));
+                setAlertaR1(null);
+                setAlertaR1b(null);
+                setAlertaR3(null);
               }}
-              renderInput={(params) => (
-                <TextField
-                  {...params}
-                  label="Espacio"
-                  placeholder="Selecciona un espacio activo"
-                />
-              )}
-            />
+              SelectProps={{ native: true }}
+            >
+              {CATEGORIAS_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </TextField>
+
+            {formValues.categoria === CATEGORIAS.SUPERVISION ? (
+              <Autocomplete
+                options={espaciosCatalogo}
+                value={formValues.espacio}
+                isOptionEqualToValue={(option, value) => option.id === value.id}
+                getOptionLabel={(option) => option?.nombre || ''}
+                onChange={(_, newValue) => {
+                  setFormValues((prev) => ({ ...prev, espacio: newValue }));
+                }}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    label="Espacio"
+                    placeholder="Selecciona un espacio activo"
+                  />
+                )}
+              />
+            ) : (
+              <TextField
+                label="Descripción de la actividad"
+                value={formValues.descripcion}
+                placeholder="Ej: Reunión con coordinadores PQRDS"
+                onChange={(event) => {
+                  setFormValues((prev) => ({ ...prev, descripcion: event.target.value }));
+                }}
+              />
+            )}
 
             <TextField
               label="Fecha programada"
@@ -744,26 +843,26 @@ const PlanificacionPanel = ({ user }) => {
               label="Notas"
               value={formValues.notas}
               multiline
-              minRows={3}
+              minRows={2}
               onChange={(event) => {
                 setFormValues((prev) => ({ ...prev, notas: event.target.value }));
               }}
             />
 
-            {validatingRules && (
+            {validatingRules && formValues.categoria === CATEGORIAS.SUPERVISION && (
               <Alert severity="info">
                 Validando reglas de planificación...
               </Alert>
             )}
 
-            {alertaR3?.bloqueado && (
+            {alertaR3?.bloqueado && formValues.categoria === CATEGORIAS.SUPERVISION && (
               <Alert severity="error">
                 Ya tienes una visita programada a este espacio esta semana
                 {alertaR3.tareaExistente?.fechaProgramada ? ` (${alertaR3.tareaExistente.fechaProgramada})` : ''}.
               </Alert>
             )}
 
-            {alertaR1?.hayChoque && (
+            {alertaR1?.hayChoque && formValues.categoria === CATEGORIAS.SUPERVISION && (
               <Alert severity="warning">
                 {alertaR1.tareasConflicto.map((tarea, idx) => (
                   <span key={tarea.id || idx}>
@@ -775,7 +874,7 @@ const PlanificacionPanel = ({ user }) => {
               </Alert>
             )}
 
-            {alertaR1b && (
+            {alertaR1b && formValues.categoria === CATEGORIAS.SUPERVISION && (
               <Alert severity="info">
                 Este espacio ya fue visitado el {alertaR1b.fechaVisita} por {alertaR1b.apoyoSupervision || alertaR1b.userEmail}
                 {alertaR1b.porcentajeCumplimiento ? ` (${alertaR1b.porcentajeCumplimiento}% cumplimiento)` : ''}.
